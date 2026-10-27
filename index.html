@@ -1,0 +1,3415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Voxly — AI English Tutor</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #0b0d12;
+    --bg-2: #11141b;
+    --panel: rgba(255,255,255,0.04);
+    --border: rgba(255,255,255,0.08);
+    --text: #e8ecf3;
+    --muted: #8a93a6;
+    --accent: #7c5cff;
+    --accent-2: #22d3ee;
+    --good: #34d399;
+    --warn: #fbbf24;
+    --bad: #f87171;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: 'Inter', 'Noto Sans Bengali', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(1000px 600px at 10% -10%, rgba(124,92,255,0.18), transparent 60%),
+      radial-gradient(800px 500px at 110% 10%, rgba(34,211,238,0.12), transparent 60%),
+      radial-gradient(700px 500px at 50% 120%, rgba(236,72,153,0.10), transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .app { position: relative; z-index: 1; }
+
+  .glass {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #7c5cff 0%, #22d3ee 100%);
+    color: white;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: transform .15s ease, box-shadow .2s ease, filter .2s ease;
+    box-shadow: 0 10px 30px -10px rgba(124,92,255,0.5);
+  }
+  .btn-primary:hover { transform: translateY(-1px); filter: brightness(1.08); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  .btn-ghost {
+    background: rgba(255,255,255,0.04);
+    color: var(--text);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.16); }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    font-size: 12px; color: var(--muted);
+  }
+  .chip-free {
+    background: rgba(52,211,153,0.12);
+    border-color: rgba(52,211,153,0.3);
+    color: #6ee7b7;
+  }
+
+  /* Home screen: one card per situation; a tap starts the conversation. */
+  .scenario-card {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+    padding: 14px; border-radius: 14px; text-align: left;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    color: var(--text);
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease, transform .15s ease;
+  }
+  .scenario-card:hover {
+    background: rgba(124,92,255,0.12);
+    border-color: rgba(124,92,255,0.5);
+    transform: translateY(-2px);
+  }
+  .scenario-card.surprise {
+    background: linear-gradient(135deg, rgba(124,92,255,0.25), rgba(34,211,238,0.15));
+    border-color: rgba(124,92,255,0.5);
+  }
+  .scenario-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(124,92,255,0.15); color: #c4b5fd;
+  }
+  .scenario-name { font-weight: 600; font-size: 14px; }
+  .scenario-desc { font-size: 12px; color: var(--muted); line-height: 1.4; }
+
+  .quick-setting { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .quick-setting select { width: auto; padding: 6px 10px; font-size: 13px; }
+
+  /* The big round button. Its look follows data-phase:
+     waiting = mic, user-listening = green with moving rings and a ✓,
+     ai-speaking = skip icon, processing = spinner. */
+  .mic-wrap {
+    position: relative; width: 120px; height: 120px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: none; padding: 0; cursor: pointer;
+  }
+  .mic-core {
+    width: 88px; height: 88px; border-radius: 50%;
+    background: linear-gradient(135deg, #7c5cff, #22d3ee);
+    display: flex; align-items: center; justify-content: center;
+    color: white;
+    box-shadow: 0 10px 40px -8px rgba(124,92,255,0.6);
+    position: relative; z-index: 2;
+    transition: background .2s ease, opacity .2s ease, transform .15s ease;
+  }
+  .mic-wrap:hover .mic-core { transform: scale(1.04); }
+  .mic-ring {
+    position: absolute; inset: 0; border-radius: 50%;
+    border: 2px solid rgba(16,185,129,0.5);
+    opacity: 0;
+  }
+  /* The rings only move while the app is listening, so movement means "speak now". */
+  .mic-wrap[data-phase="user-listening"] .mic-ring { animation: pulse 2s ease-out infinite; }
+  .mic-ring.r2 { animation-delay: .6s; }
+  .mic-ring.r3 { animation-delay: 1.2s; }
+  @keyframes pulse {
+    0% { transform: scale(0.6); opacity: 0.9; }
+    100% { transform: scale(1.4); opacity: 0; }
+  }
+  .mic-wrap[data-phase="user-listening"] .mic-core {
+    background: linear-gradient(135deg, #10b981, #22d3ee);
+    box-shadow: 0 10px 40px -8px rgba(16,185,129,0.6);
+  }
+  .mic-wrap[data-phase="ai-speaking"] .mic-core { background: linear-gradient(135deg, #7c5cff, #a78bfa); }
+  .mic-wrap[data-phase="processing"] .mic-core { opacity: 0.6; }
+  .mic-wrap[data-phase="processing"] { cursor: wait; }
+
+  /* Show only the icon that fits the phase. */
+  .mic-icon { display: none; }
+  .mic-wrap[data-phase="waiting"] .mic-icon-mic,
+  .mic-wrap[data-phase="user-listening"] .mic-icon-done,
+  .mic-wrap[data-phase="ai-speaking"] .mic-icon-skip,
+  .mic-wrap[data-phase="processing"] .mic-icon-wait { display: block; }
+  .mic-icon-wait { animation: spin 1.2s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .listening .mic-core { animation: bob 1.4s ease-in-out infinite; }
+  @keyframes bob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+
+  .wave { display: flex; gap: 4px; align-items: center; height: 40px; }
+  .wave span {
+    width: 4px; background: linear-gradient(180deg, #7c5cff, #22d3ee);
+    border-radius: 2px;
+    animation: wave 1s ease-in-out infinite;
+  }
+  .wave span:nth-child(1){ animation-delay: 0s; height: 30%; }
+  .wave span:nth-child(2){ animation-delay: .1s; height: 60%; }
+  .wave span:nth-child(3){ animation-delay: .2s; height: 90%; }
+  .wave span:nth-child(4){ animation-delay: .3s; height: 50%; }
+  .wave span:nth-child(5){ animation-delay: .4s; height: 80%; }
+  .wave span:nth-child(6){ animation-delay: .5s; height: 40%; }
+  .wave span:nth-child(7){ animation-delay: .6s; height: 70%; }
+  @keyframes wave {
+    0%, 100% { transform: scaleY(0.4); }
+    50% { transform: scaleY(1); }
+  }
+
+  .transcript-line { animation: fadeUp .35s ease; }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Chat bubbles: the tutor on the left, the learner on the right. */
+  .bubble-row { display: flex; }
+  .bubble-row.from-you { justify-content: flex-end; }
+  .bubble { max-width: 85%; padding: 10px 14px; border-radius: 16px; line-height: 1.55; }
+  .bubble-ai { background: rgba(124,92,255,0.12); border: 1px solid rgba(124,92,255,0.25); border-top-left-radius: 4px; }
+  .bubble-you { background: rgba(34,211,238,0.10); border: 1px solid rgba(34,211,238,0.25); border-top-right-radius: 4px; }
+
+  /* "What to do now", shown above the round button. */
+  .status-pill {
+    display: inline-flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 8px 18px; border-radius: 16px;
+    font-size: 15px; font-weight: 600; text-align: center;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    transition: background .2s ease, border-color .2s ease, color .2s ease;
+  }
+  .status-pill[data-kind="user-listening"] { background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.4); color: #6ee7b7; }
+  .status-pill[data-kind="ai-speaking"] { background: rgba(124,92,255,0.12); border-color: rgba(124,92,255,0.4); color: #c4b5fd; }
+  .status-pill[data-kind="processing"] { background: rgba(251,191,36,0.10); border-color: rgba(251,191,36,0.35); color: #fde68a; }
+  .status-bangla { font-size: 12px; font-weight: 400; opacity: 0.85; }
+
+  /* The two smaller buttons next to the round button. */
+  .side-control {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    width: 92px; font-size: 12px; line-height: 1.3; color: var(--muted);
+    background: none; border: none; cursor: pointer;
+  }
+  .side-control:hover { color: var(--text); }
+  .side-control:disabled { opacity: 0.35; cursor: not-allowed; }
+  .side-icon {
+    width: 48px; height: 48px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+    transition: background .15s ease;
+  }
+  .side-control:hover:not(:disabled) .side-icon { background: rgba(255,255,255,0.1); }
+
+  .correction-card {
+    margin-left: auto;
+    max-width: 85%;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: rgba(52,211,153,0.08);
+    border: 1px solid rgba(52,211,153,0.25);
+  }
+
+  .line-action {
+    font-size: 11px;
+    color: var(--muted);
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 1px 8px;
+    cursor: pointer;
+  }
+  .line-action:hover { color: var(--text); border-color: rgba(255,255,255,0.16); }
+
+  .score-bar {
+    height: 6px; border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    overflow: hidden;
+  }
+  .score-bar > div {
+    height: 100%; border-radius: 999px;
+    background: linear-gradient(90deg, #7c5cff, #22d3ee);
+    transition: width 1s cubic-bezier(.2,.8,.2,1);
+  }
+
+  .tag {
+    padding: 2px 8px; border-radius: 6px;
+    font-size: 11px; font-weight: 600;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .tag-ai { background: rgba(124,92,255,0.15); color: #b8a7ff; }
+  .tag-you { background: rgba(34,211,238,0.15); color: #7ee8f7; }
+
+  .hidden-screen { display: none; }
+
+  input[type="password"], input[type="text"], select {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 12px;
+    border-radius: 10px;
+    width: 100%;
+    font-family: inherit;
+    font-size: 14px;
+    outline: none;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  select option { background: var(--bg-2); color: var(--text); }
+  input:focus, select:focus { border-color: rgba(124,92,255,0.6); background: rgba(255,255,255,0.06); }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    padding: 10px 16px; border-radius: 10px;
+    background: rgba(20,22,30,0.95);
+    border: 1px solid var(--border);
+    color: var(--text); font-size: 14px;
+    z-index: 50;
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+    max-width: 90vw;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+
+  .scroll-thin::-webkit-scrollbar { width: 6px; }
+  .scroll-thin::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+  .kbd {
+    font-family: ui-monospace, monospace;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    padding: 2px 6px; border-radius: 5px;
+    font-size: 11px; color: var(--muted);
+  }
+
+  .provider-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    cursor: pointer;
+    transition: all .15s ease;
+  }
+  .provider-card:hover { background: rgba(255,255,255,0.06); }
+  .provider-card.selected {
+    border-color: rgba(124,92,255,0.6);
+    background: rgba(124,92,255,0.08);
+  }
+</style>
+</head>
+<body>
+<div class="app min-h-screen flex flex-col">
+
+  <header class="px-6 md:px-10 py-5 flex items-center justify-between border-b border-white/5">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #7c5cff, #22d3ee);">
+        <i data-lucide="audio-waveform" class="w-5 h-5 text-white"></i>
+      </div>
+      <div>
+        <div class="font-semibold tracking-tight text-lg leading-none">Voxly</div>
+        <div class="text-xs text-[color:var(--muted)] mt-1">AI English tutor</div>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="progressBtn" class="btn-ghost rounded-lg px-3 py-2 text-sm flex items-center gap-2">
+        <i data-lucide="trending-up" class="w-4 h-4"></i>
+        <span class="hidden sm:inline">Progress</span>
+      </button>
+      <button id="settingsBtn" class="btn-ghost rounded-lg px-3 py-2 text-sm flex items-center gap-2">
+        <i data-lucide="settings-2" class="w-4 h-4"></i>
+        <span class="hidden sm:inline">Settings</span>
+      </button>
+    </div>
+  </header>
+
+  <div id="fileWarning" class="hidden px-4 md:px-10 pt-4">
+    <div class="max-w-5xl mx-auto rounded-xl px-4 py-3 text-sm" style="background: rgba(251,191,36,0.10); border: 1px solid rgba(251,191,36,0.35);">
+      <div class="font-semibold flex items-center gap-2" style="color: #fde68a;">
+        <i data-lucide="info" class="w-4 h-4"></i>
+        The browser will ask for the microphone every turn
+      </div>
+      <p class="mt-1">You opened Voxly as a file, and browsers do not remember microphone permission for files. Open it through a local web address instead:</p>
+      <ol class="mt-2 space-y-1 list-decimal list-inside">
+        <li>In a terminal, run: <code id="fileWarningCommand" class="kbd break-all"></code></li>
+        <li>Open <code id="fileWarningAddress" class="kbd break-all"></code> in Chrome or Edge.</li>
+        <li>When the browser asks, choose <b>Allow while visiting the site</b>.</li>
+      </ol>
+    </div>
+  </div>
+
+  <main class="flex-1 px-4 md:px-10 py-8 max-w-5xl w-full mx-auto">
+
+    <section id="screen-landing" class="py-6 md:py-10">
+      <div class="text-center max-w-2xl mx-auto">
+        <h1 class="text-3xl md:text-5xl font-bold tracking-tight leading-tight">
+          Practice English by
+          <span style="background: linear-gradient(135deg, #7c5cff, #22d3ee); -webkit-background-clip: text; background-clip: text; color: transparent;">actually talking.</span>
+        </h1>
+        <p class="text-[color:var(--muted)] mt-4 text-base md:text-lg">
+          Pick a situation. Your tutor speaks first, you answer out loud, and you get gentle corrections as you go.
+        </p>
+        <div class="flex flex-wrap items-center justify-center gap-4 mt-6">
+          <label class="quick-setting">
+            <i data-lucide="graduation-cap" class="w-4 h-4"></i>
+            Level
+            <select id="quickLevel">
+              <option value="beginner">Beginner</option>
+              <option value="intermediate">Intermediate</option>
+              <option value="advanced">Advanced</option>
+            </select>
+          </label>
+          <label class="quick-setting">
+            <i data-lucide="languages" class="w-4 h-4"></i>
+            Explanations in
+            <select id="quickTipLanguage">
+              <option value="bangla">বাংলা</option>
+              <option value="english">English</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="text-sm font-semibold mt-10 mb-3">Choose a situation to start</div>
+      <div id="scenarioPicker" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+        <button type="button" class="scenario-card surprise" data-scenario="random">
+          <span class="scenario-icon"><i data-lucide="shuffle" class="w-5 h-5"></i></span>
+          <span class="scenario-name">Surprise me</span>
+          <span class="scenario-desc">A random situation</span>
+        </button>
+        <button type="button" class="scenario-card" data-scenario="freetalk">
+          <span class="scenario-icon"><i data-lucide="message-circle" class="w-5 h-5"></i></span>
+          <span class="scenario-name">Free talk</span>
+          <span class="scenario-desc">Chat about your day</span>
+        </button>
+        <button type="button" class="scenario-card" data-scenario="coffee">
+          <span class="scenario-icon"><i data-lucide="coffee" class="w-5 h-5"></i></span>
+          <span class="scenario-name">Coffee shop</span>
+          <span class="scenario-desc">Order a drink</span>
+        </button>
+        <button type="button" class="scenario-card" data-scenario="restaurant">
+          <span class="scenario-icon"><i data-lucide="utensils" class="w-5 h-5"></i></span>
+          <span class="scenario-name">Restaurant</span>
+          <span class="scenario-desc">Order food, pay the bill</span>
+        </button>
+        <button type="button" class="scenario-card" data-scenario="airport">
+          <span class="scenario-icon"><i data-lucide="plane" class="w-5 h-5"></i></span>
+          <span class="scenario-name">Airport</span>
+          <span class="scenario-desc">Check in for a flight</span>
+        </button>
+        <button type="button" class="scenario-card" data-scenario="shopping">
+          <span class="scenario-icon"><i data-lucide="shopping-bag" class="w-5 h-5"></i></span>
+          <span class="scenario-name">Shopping</span>
+          <span class="scenario-desc">Find clothes, ask prices</span>
+        </button>
+        <button type="button" class="scenario-card" data-scenario="coworker">
+          <span class="scenario-icon"><i data-lucide="users" class="w-5 h-5"></i></span>
+          <span class="scenario-name">Coworkers</span>
+          <span class="scenario-desc">Small talk at work</span>
+        </button>
+        <button type="button" class="scenario-card" data-scenario="meeting">
+          <span class="scenario-icon"><i data-lucide="hand" class="w-5 h-5"></i></span>
+          <span class="scenario-name">Meeting someone</span>
+          <span class="scenario-desc">Introduce yourself</span>
+        </button>
+        <button type="button" class="scenario-card" data-scenario="weekend">
+          <span class="scenario-icon"><i data-lucide="calendar" class="w-5 h-5"></i></span>
+          <span class="scenario-name">Weekend plans</span>
+          <span class="scenario-desc">Make plans with a friend</span>
+        </button>
+        <button type="button" class="scenario-card" data-scenario="taxi">
+          <span class="scenario-icon"><i data-lucide="car-taxi-front" class="w-5 h-5"></i></span>
+          <span class="scenario-name">Taxi</span>
+          <span class="scenario-desc">Tell the driver where to go</span>
+        </button>
+      </div>
+
+      <p class="text-center text-xs text-[color:var(--muted)] mt-8">
+        When you are done, say <span class="kbd">stop</span> or press <b>Finish</b> to get your report.
+      </p>
+    </section>
+
+    <section id="screen-convo" class="hidden-screen">
+      <div class="flex items-start justify-between gap-3 mb-4">
+        <div class="min-w-0">
+          <div class="text-xs uppercase tracking-wider text-[color:var(--muted)]">Situation</div>
+          <h2 id="scenarioTitle" class="text-xl md:text-2xl font-bold tracking-tight mt-1">—</h2>
+          <p id="scenarioDesc" class="text-sm text-[color:var(--muted)] mt-1">—</p>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <button id="exitBtn" class="btn-ghost rounded-full px-4 py-2 text-sm flex items-center gap-2" title="Leave now, without a report">
+            <i data-lucide="x" class="w-4 h-4"></i>
+            Exit
+          </button>
+          <button id="stopBtn" class="btn-ghost rounded-full px-4 py-2 text-sm flex items-center gap-2" title="End the conversation and see your report">
+            <i data-lucide="flag" class="w-4 h-4"></i>
+            Finish
+          </button>
+        </div>
+      </div>
+
+      <div class="grid md:grid-cols-[1fr_280px] gap-5">
+        <div class="glass rounded-2xl flex flex-col overflow-hidden">
+          <div class="flex items-center justify-between px-5 pt-4">
+            <div class="text-xs uppercase tracking-wider text-[color:var(--muted)]">Conversation</div>
+            <button id="clearTranscript" class="text-xs text-[color:var(--muted)] hover:text-white flex items-center gap-1">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Clear
+            </button>
+          </div>
+          <div id="transcript" class="scroll-thin space-y-3 overflow-y-auto px-5 py-4 text-sm" style="height: 46vh; min-height: 240px;"></div>
+
+          <div class="border-t border-white/5 px-4 py-5 flex flex-col items-center">
+            <div id="phaseLabel" class="status-pill" data-kind="waiting">
+              <span id="phaseText">Getting ready…</span>
+              <span id="phaseBangla" class="status-bangla" lang="bn"></span>
+            </div>
+            <div id="waveWrap" class="wave mt-2" style="display:none; height: 24px;">
+              <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+            </div>
+            <div class="flex items-center justify-center gap-4 sm:gap-8 mt-3">
+              <button id="helpBtn" type="button" class="side-control">
+                <span class="side-icon"><i data-lucide="lightbulb" class="w-5 h-5 text-amber-300"></i></span>
+                Help me answer
+              </button>
+              <button id="micWrap" type="button" class="mic-wrap" data-phase="waiting" aria-label="Speak, finish speaking, or skip the tutor">
+                <span class="mic-ring"></span>
+                <span class="mic-ring r2"></span>
+                <span class="mic-ring r3"></span>
+                <span class="mic-core">
+                  <i data-lucide="mic" class="mic-icon mic-icon-mic w-9 h-9"></i>
+                  <i data-lucide="check" class="mic-icon mic-icon-done w-10 h-10"></i>
+                  <i data-lucide="skip-forward" class="mic-icon mic-icon-skip w-9 h-9"></i>
+                  <i data-lucide="loader" class="mic-icon mic-icon-wait w-9 h-9"></i>
+                </span>
+              </button>
+              <button id="replayBtn" type="button" class="side-control">
+                <span class="side-icon"><i data-lucide="volume-2" class="w-5 h-5 text-violet-300"></i></span>
+                Hear again slowly
+              </button>
+            </div>
+            <div id="micHint" class="text-xs text-[color:var(--muted)] mt-3 text-center"></div>
+            <div id="hintBox" class="hidden w-full mt-4 rounded-xl p-4 text-sm text-left" style="background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.3);"></div>
+          </div>
+        </div>
+
+        <div class="glass rounded-2xl p-5 h-fit">
+          <div class="text-xs uppercase tracking-wider text-[color:var(--muted)] mb-2">Useful phrases · tap to hear</div>
+          <ul id="phraseList" class="space-y-1 text-sm"></ul>
+
+          <div class="mt-5 pt-4 border-t border-white/5">
+            <div class="text-xs uppercase tracking-wider text-[color:var(--muted)] mb-3">Session</div>
+            <div class="flex items-center justify-between text-sm">
+              <span class="text-[color:var(--muted)]">Turns</span>
+              <span id="turnCount" class="font-semibold">0</span>
+            </div>
+            <div class="flex items-center justify-between text-sm mt-2">
+              <span class="text-[color:var(--muted)]">Corrections</span>
+              <span id="correctionCount" class="font-semibold">0</span>
+            </div>
+            <div class="flex items-center justify-between text-sm mt-2">
+              <span class="text-[color:var(--muted)]">Elapsed</span>
+              <span id="elapsed" class="font-semibold tabular-nums">00:00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-feedback" class="hidden-screen">
+      <div class="text-center mb-8">
+        <div class="chip mb-4">
+          <i data-lucide="trophy" class="w-3.5 h-3.5"></i>
+          <span>Session complete</span>
+        </div>
+        <h2 class="text-3xl md:text-4xl font-bold tracking-tight">Here's your report</h2>
+        <p class="text-[color:var(--muted)] mt-2">How the conversation went, and what to practice next.</p>
+      </div>
+
+      <div class="glass rounded-2xl p-6">
+        <div class="flex items-center gap-2 mb-3">
+          <i data-lucide="message-circle" class="w-4 h-4 text-emerald-400"></i>
+          <div class="font-semibold">Your tutor says</div>
+        </div>
+        <p id="overallSummary" class="text-sm text-[color:var(--muted)] leading-relaxed"></p>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-5 mt-5">
+        <div class="glass rounded-2xl p-6">
+          <div class="flex items-center gap-2 mb-3">
+            <i data-lucide="pencil" class="w-4 h-4 text-emerald-400"></i>
+            <div class="font-semibold">Your corrections</div>
+          </div>
+          <ul id="correctionList" class="space-y-3 text-sm"></ul>
+        </div>
+
+        <div class="glass rounded-2xl p-6">
+          <div class="flex items-center gap-2 mb-3">
+            <i data-lucide="lightbulb" class="w-4 h-4 text-amber-400"></i>
+            <div class="font-semibold">Phrases to learn</div>
+          </div>
+          <ul id="learnList" class="space-y-2 text-sm"></ul>
+        </div>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-5 mt-5">
+        <div class="glass rounded-2xl p-6">
+          <div class="flex items-center gap-2 mb-1">
+            <i data-lucide="audio-lines" class="w-4 h-4 text-violet-400"></i>
+            <div class="font-semibold">Pronunciation</div>
+          </div>
+          <div class="text-xs text-[color:var(--muted)] mb-3">How clearly the app understood your speech</div>
+          <div class="flex items-end gap-3">
+            <div class="text-3xl font-bold" id="scorePron">—</div>
+            <div class="flex-1"><div class="score-bar"><div id="barPron" style="width:0%"></div></div></div>
+          </div>
+          <p id="notePron" class="text-sm text-[color:var(--muted)] mt-4"></p>
+        </div>
+
+        <div class="glass rounded-2xl p-6">
+          <div class="flex items-center gap-2 mb-1">
+            <i data-lucide="book-open" class="w-4 h-4 text-cyan-400"></i>
+            <div class="font-semibold">Grammar</div>
+          </div>
+          <div class="text-xs text-[color:var(--muted)] mb-3">Structure and correctness</div>
+          <div class="flex items-end gap-3">
+            <div class="text-3xl font-bold" id="scoreGram">—</div>
+            <div class="flex-1"><div class="score-bar"><div id="barGram" style="width:0%"></div></div></div>
+          </div>
+          <p id="noteGram" class="text-sm text-[color:var(--muted)] mt-4"></p>
+        </div>
+
+        <div class="glass rounded-2xl p-6">
+          <div class="flex items-center gap-2 mb-1">
+            <i data-lucide="book-marked" class="w-4 h-4 text-pink-400"></i>
+            <div class="font-semibold">Vocabulary</div>
+          </div>
+          <div class="text-xs text-[color:var(--muted)] mb-3">Range and word choice</div>
+          <div class="flex items-end gap-3">
+            <div class="text-3xl font-bold" id="scoreVocab">—</div>
+            <div class="flex-1"><div class="score-bar"><div id="barVocab" style="width:0%"></div></div></div>
+          </div>
+          <p id="noteVocab" class="text-sm text-[color:var(--muted)] mt-4"></p>
+        </div>
+
+        <div class="glass rounded-2xl p-6">
+          <div class="flex items-center gap-2 mb-1">
+            <i data-lucide="zap" class="w-4 h-4 text-amber-400"></i>
+            <div class="font-semibold">Fluency</div>
+          </div>
+          <div class="text-xs text-[color:var(--muted)] mb-3">Flow and naturalness</div>
+          <div class="flex items-end gap-3">
+            <div class="text-3xl font-bold" id="scoreFlu">—</div>
+            <div class="flex-1"><div class="score-bar"><div id="barFlu" style="width:0%"></div></div></div>
+          </div>
+          <p id="noteFlu" class="text-sm text-[color:var(--muted)] mt-4"></p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap gap-3 mt-6 justify-center">
+        <button id="againBtn" class="btn-primary rounded-full px-6 py-3 flex items-center gap-2">
+          <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+          Start another conversation
+        </button>
+        <button id="homeBtn" class="btn-ghost rounded-full px-6 py-3 flex items-center gap-2">
+          <i data-lucide="house" class="w-4 h-4"></i>
+          Back to home
+        </button>
+      </div>
+    </section>
+
+    <section id="screen-progress" class="hidden-screen">
+      <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <div>
+          <h2 class="text-3xl font-bold tracking-tight">Your progress</h2>
+          <p class="text-[color:var(--muted)] mt-1 text-sm">Saved in this browser.</p>
+        </div>
+        <button id="progressBackBtn" class="btn-ghost rounded-full px-5 py-2 text-sm flex items-center gap-2">
+          <i data-lucide="house" class="w-4 h-4"></i>
+          Back to home
+        </button>
+      </div>
+
+      <div class="grid grid-cols-3 gap-4">
+        <div class="glass rounded-2xl p-5 text-center">
+          <div class="text-3xl font-bold" id="statStreak">0</div>
+          <div class="text-xs text-[color:var(--muted)] mt-1">day streak</div>
+        </div>
+        <div class="glass rounded-2xl p-5 text-center">
+          <div class="text-3xl font-bold" id="statSessions">0</div>
+          <div class="text-xs text-[color:var(--muted)] mt-1">sessions</div>
+        </div>
+        <div class="glass rounded-2xl p-5 text-center">
+          <div class="text-3xl font-bold" id="statMinutes">0</div>
+          <div class="text-xs text-[color:var(--muted)] mt-1">minutes practised</div>
+        </div>
+      </div>
+
+      <div id="reviewPanel" class="hidden glass rounded-2xl p-6 mt-5">
+        <div class="flex items-center justify-between mb-3">
+          <div class="font-semibold">Review your mistakes</div>
+          <div id="reviewCounter" class="text-xs text-[color:var(--muted)]"></div>
+        </div>
+        <div class="text-sm text-[color:var(--muted)]">You said:</div>
+        <div id="reviewSaid" class="text-lg mt-1"></div>
+        <div class="text-sm text-[color:var(--muted)] mt-3">Say a better version out loud, then check the answer.</div>
+        <div id="reviewAnswer" class="hidden correction-card mt-3" style="margin-left: 0;">
+          <div id="reviewBetter" class="text-emerald-300"></div>
+          <div id="reviewWhy" class="text-sm text-[color:var(--muted)] mt-1"></div>
+        </div>
+        <div class="flex flex-wrap gap-2 mt-4">
+          <button id="reviewShowBtn" class="btn-primary rounded-full px-5 py-2 text-sm">Show answer</button>
+          <button id="reviewListenBtn" class="btn-ghost rounded-full px-5 py-2 text-sm">🔊 Listen</button>
+          <button id="reviewNextBtn" class="btn-ghost rounded-full px-5 py-2 text-sm">Next card</button>
+          <button id="reviewCloseBtn" class="btn-ghost rounded-full px-5 py-2 text-sm">Close</button>
+        </div>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-5 mt-5">
+        <div class="glass rounded-2xl p-6">
+          <div class="font-semibold mb-3">Recent sessions</div>
+          <ul id="sessionList" class="space-y-2 text-sm"></ul>
+        </div>
+        <div class="glass rounded-2xl p-6">
+          <div class="flex items-center justify-between gap-3 mb-3">
+            <div class="font-semibold">Mistakes notebook (<span id="notebookCount">0</span>)</div>
+            <button id="reviewBtn" class="btn-primary rounded-full px-4 py-1.5 text-xs">Review my mistakes</button>
+          </div>
+          <ul id="notebookList" class="space-y-3 text-sm max-h-[480px] overflow-y-auto scroll-thin pr-2"></ul>
+        </div>
+      </div>
+
+      <div class="text-center mt-6">
+        <button id="clearHistoryBtn" class="text-xs text-[color:var(--muted)] hover:text-white underline">Clear all saved progress</button>
+      </div>
+    </section>
+
+  </main>
+
+  <div id="settingsDrawer" class="hidden fixed inset-0 z-40">
+    <div class="absolute inset-0 bg-black/60" id="settingsBackdrop"></div>
+    <div class="absolute right-0 top-0 h-full w-full max-w-md glass border-l border-white/10 p-6 overflow-y-auto scroll-thin">
+      <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-2">
+          <i data-lucide="settings-2" class="w-5 h-5"></i>
+          <h3 class="text-lg font-semibold">Settings</h3>
+        </div>
+        <button id="closeSettings" class="btn-ghost rounded-lg p-2"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+
+      <div class="space-y-5">
+        <div class="text-xs uppercase tracking-wider text-[color:var(--muted)]">Practice</div>
+
+        <div>
+          <label class="text-sm font-medium mb-2 block">Your English level</label>
+          <select id="level">
+            <option value="beginner">Beginner: simple words, short sentences</option>
+            <option value="intermediate">Intermediate: everyday English</option>
+            <option value="advanced">Advanced: natural, native-like English</option>
+          </select>
+          <p class="text-xs text-[color:var(--muted)] mt-2">The tutor adjusts its words and corrections to your level.</p>
+        </div>
+
+        <div>
+          <label class="text-sm font-medium mb-2 block">Explain my mistakes in</label>
+          <select id="tipLanguage">
+            <option value="bangla">বাংলা (Bangla)</option>
+            <option value="english">English</option>
+          </select>
+          <label class="flex items-center gap-2 text-sm mt-3 cursor-pointer">
+            <input type="checkbox" id="speakTips" class="accent-violet-500 w-4 h-4"/>
+            Speak the tutor's tips out loud
+          </label>
+          <label class="flex items-center gap-2 text-sm mt-2 cursor-pointer">
+            <input type="checkbox" id="repeatPractice" class="accent-violet-500 w-4 h-4"/>
+            Repeat-after-me practice after each correction
+          </label>
+          <p id="tipVoiceHelp" class="text-xs text-[color:var(--muted)] mt-2"></p>
+        </div>
+
+        <div>
+          <label class="text-sm font-medium mb-2 block">Tutor's voice</label>
+          <select id="voiceSelect"></select>
+          <p class="text-xs text-[color:var(--muted)] mt-2">Uses your browser's text-to-speech voices.</p>
+        </div>
+
+        <div>
+          <label class="text-sm font-medium mb-2 block">Tutor's speaking speed</label>
+          <input type="range" id="rate" min="0.7" max="1.3" step="0.05" value="1" class="w-full accent-violet-500"/>
+        </div>
+
+        <details id="advancedSettings" class="rounded-xl border border-white/10 p-4">
+          <summary class="cursor-pointer text-sm font-medium">Advanced: AI service and microphone</summary>
+          <p class="text-xs text-[color:var(--muted)] mt-2">Now using: <span id="providerChipText">Groq</span></p>
+          <div class="space-y-5 mt-4">
+        <div>
+          <label class="text-sm font-medium mb-3 block">AI Provider</label>
+          <div class="space-y-2" id="providerList">
+            <div class="provider-card selected" data-provider="groq">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <i data-lucide="zap" class="w-4 h-4 text-amber-300"></i>
+                  <div class="font-medium">Groq</div>
+                </div>
+                <span class="chip chip-free text-[10px]">FREE · BEST FOR NON-STOP</span>
+              </div>
+              <div class="text-xs text-[color:var(--muted)] mt-1">Free key, no credit card. Very fast replies and a much higher free daily limit than OpenRouter.</div>
+            </div>
+            <div class="provider-card" data-provider="openrouter">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <i data-lucide="route" class="w-4 h-4 text-cyan-400"></i>
+                  <div class="font-medium">OpenRouter</div>
+                </div>
+                <span class="chip chip-free text-[10px]">FREE MODELS</span>
+              </div>
+              <div class="text-xs text-[color:var(--muted)] mt-1">Free models with a free OpenRouter key (small daily limit). Also lists Qwen models, which are paid but very cheap.</div>
+            </div>
+            <div class="provider-card" data-provider="qwen">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <i data-lucide="sparkles" class="w-4 h-4 text-emerald-400"></i>
+                  <div class="font-medium">Qwen (Alibaba Cloud)</div>
+                </div>
+                <span class="chip chip-free text-[10px]">FREE TRIAL</span>
+              </div>
+              <div class="text-xs text-[color:var(--muted)] mt-1">Qwen's own API. Fast replies. New Alibaba Cloud accounts get a free trial quota.</div>
+            </div>
+            <div class="provider-card" data-provider="openai">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <i data-lucide="cpu" class="w-4 h-4 text-violet-400"></i>
+                  <div class="font-medium">OpenAI</div>
+                </div>
+                <span class="chip text-[10px]">PAID</span>
+              </div>
+              <div class="text-xs text-[color:var(--muted)] mt-1">GPT-4o-mini. Requires API key.</div>
+            </div>
+            <div class="provider-card" data-provider="demo">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <i data-lucide="flask-conical" class="w-4 h-4 text-amber-400"></i>
+                  <div class="font-medium">Demo mode</div>
+                </div>
+                <span class="chip text-[10px]">OFFLINE</span>
+              </div>
+              <div class="text-xs text-[color:var(--muted)] mt-1">No AI. Canned responses for testing.</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="modelBlock">
+          <label class="text-sm font-medium mb-2 block">Model</label>
+          <select id="modelSelect"></select>
+          <p id="modelHelp" class="text-xs text-[color:var(--muted)] mt-2"></p>
+        </div>
+
+        <div id="keyBlock" style="display:none;">
+          <label class="text-sm font-medium mb-2 block">API Key</label>
+          <input type="password" id="apiKey" placeholder="Paste your API key here" autocomplete="off"/>
+          <p id="keyHelp" class="text-xs text-[color:var(--muted)] mt-2"></p>
+          <p id="keySource" class="text-xs text-emerald-300 mt-1"></p>
+        </div>
+
+        <div>
+          <label class="text-sm font-medium mb-2 block">Speech recognition</label>
+          <select id="speechEngine">
+            <option value="whisper">Groq Whisper: understands accents best (uses your Groq key)</option>
+            <option value="browser">Browser: shows your words live, less accurate</option>
+          </select>
+          <p class="text-xs text-[color:var(--muted)] mt-2">With Whisper, your turn ends when you pause for about 2 seconds, or when you tap the mic.</p>
+        </div>
+
+        <div>
+          <label class="text-sm font-medium mb-2 block">Recognition language (browser recognition)</label>
+          <select id="lang">
+            <option value="en-IN">English (India / South Asia accent)</option>
+            <option value="en-US">English (US)</option>
+            <option value="en-GB">English (UK)</option>
+            <option value="en-AU">English (Australia)</option>
+          </select>
+        </div>
+
+          </div>
+        </details>
+
+        <div class="pt-4 border-t border-white/5">
+          <button id="saveSettings" class="btn-primary rounded-lg px-4 py-2 w-full">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+</div>
+
+<script>
+// ============================================================
+//  YOUR API KEYS: edit them here at any time.
+//  A key typed in Settings (in the browser) wins over the key here.
+//  Clear the Settings field and press Save to use the key here again.
+//  Keep this file private: anyone who can open the page can read these keys.
+// ============================================================
+const FILE_API_KEYS = {
+  groq: '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',
+  openrouter: '',
+  qwen: '',
+  openai: ''
+};
+
+const SCENARIOS = [
+  { id: 'restaurant', title: 'At a restaurant', icon: 'utensils',
+    desc: "You're seated at a casual restaurant. Order food, ask questions about the menu, and handle the bill.",
+    aiFirst: "Hi there! Welcome to The Green Table. Do you have a reservation, or would you like to sit at the bar?",
+    phrases: ["Could I see the menu, please?", "What do you recommend?", "I'll have the…", "Could we get the check?"] },
+  { id: 'coworker', title: 'Talking to a coworker', icon: 'users',
+    desc: "You run into a coworker in the office kitchen. Make small talk about work and the week.",
+    aiFirst: "Hey! I haven't seen you since Monday. How's your week going?",
+    phrases: ["Pretty good, thanks!", "I've been working on…", "How about you?", "See you at the meeting."] },
+  { id: 'shopping', title: 'Shopping', icon: 'shopping-bag',
+    desc: "You're in a clothing store looking for something specific. Ask the shop assistant for help.",
+    aiFirst: "Hi! Are you finding everything okay, or can I help you look for something?",
+    phrases: ["Do you have this in a different size?", "How much is this?", "Where's the fitting room?", "I'll take it."] },
+  { id: 'meeting', title: 'Meeting someone new', icon: 'hand',
+    desc: "You're at a friend's gathering and meet someone new. Introduce yourself and keep the conversation going.",
+    aiFirst: "Hi, I don't think we've met — I'm Alex. How do you know the host?",
+    phrases: ["Nice to meet you!", "I'm [name].", "What do you do?", "So, how do you know…?"] },
+  { id: 'airport', title: 'At the airport', icon: 'plane',
+    desc: "You're at the check-in desk for an international flight. Handle the check-in process.",
+    aiFirst: "Good morning! May I see your passport and booking confirmation, please?",
+    phrases: ["Here you go.", "Window seat, please.", "Is the flight on time?", "Where's gate…?"] },
+  { id: 'weekend', title: 'Making weekend plans', icon: 'calendar',
+    desc: "You're chatting with a friend about what to do this weekend. Suggest ideas and agree on a plan.",
+    aiFirst: "Hey! Any plans for the weekend? I was thinking we could do something.",
+    phrases: ["How about…?", "I'm free on Saturday.", "That sounds great!", "What time should we meet?"] },
+  { id: 'coffee', title: 'Ordering coffee', icon: 'coffee',
+    desc: "You're at a coffee shop counter. Order your drink, customize it, and pay.",
+    aiFirst: "Hi! What can I get started for you today?",
+    phrases: ["Can I get a latte, please?", "With oat milk.", "For here, thanks.", "Keep the change."] },
+  { id: 'taxi', title: 'Taking a taxi', icon: 'car-taxi-front',
+    desc: "You get into a taxi and need to tell the driver where to go and make small talk.",
+    aiFirst: "Hi! Where are we heading today?",
+    phrases: ["To the central station, please.", "How long will it take?", "Could you turn the AC on?", "Keep the change."] },
+  { id: 'freetalk', title: 'Free conversation', icon: 'message-circle',
+    desc: "Chat with your tutor about anything you like: your day, your hobbies, your work or your plans.",
+    aiFirst: "Hi! It's nice to talk with you. How has your day been so far?",
+    phrases: ["My day has been…", "I really enjoy…", "What about you?", "That's interesting!"] }
+];
+
+const STOP_PHRASES = ["stop", "ok stop", "okay stop", "that's all", "thats all", "that is all", "i'm done", "im done", "end conversation", "let's stop", "lets stop", "goodbye for now"];
+
+// How many recent chat messages are sent to the AI on each turn.
+// Keeping this small lets the conversation go on and on without hitting the
+// free per-minute token limits or the model's size limit.
+const MAX_RECENT_MESSAGES = 12;
+
+// Groq Whisper listening: how the app decides that the learner has finished talking.
+const WHISPER_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
+const WHISPER_MODEL = 'whisper-large-v3-turbo';
+const VOLUME_CHECK_MS = 100;          // how often the microphone volume is checked
+const MIN_SPEECH_VOLUME = 0.01;       // quieter than this never counts as speech
+const MIN_SPEECH_MS = 300;            // sound must last this long to count as speech
+const SILENCE_TO_END_TURN_MS = 1800;  // this much quiet after speaking ends the turn
+const MAX_TURN_MS = 45000;            // one turn never records longer than this
+
+// Progress page: finished sessions are saved in this browser.
+const HISTORY_STORAGE_KEY = 'voxly.history';
+const MAX_SAVED_SESSIONS = 200;
+const REVIEW_CARD_COUNT = 5;
+
+const LEVELS = {
+  beginner: 'The learner is a beginner. Use very simple words and short sentences. Only correct clear, important mistakes.',
+  intermediate: 'The learner is intermediate. Use everyday words and natural sentences. Correct grammar mistakes and clearly unnatural phrases.',
+  advanced: 'The learner is advanced. Use natural, native-like English, including common idioms. Also suggest more natural or more precise word choices.'
+};
+
+const PROVIDERS = {
+  groq: {
+    name: 'Groq',
+    needsKey: true,
+    chatUrl: 'https://api.groq.com/openai/v1/chat/completions',
+    // Fallback list only. Once a key is saved, the current list is loaded from Groq.
+    models: [
+      { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B (smarter)' },
+      { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B (fastest)' }
+    ],
+    defaultModel: 'openai/gpt-oss-120b',
+    help: 'Free and very fast: the best choice for non-stop practice.',
+    keyHelp: 'Create a free key at console.groq.com/keys. No credit card needed.'
+  },
+  openrouter: {
+    name: 'OpenRouter',
+    needsKey: true,
+    chatUrl: 'https://openrouter.ai/api/v1/chat/completions',
+    // Fallback list only. The current list is loaded from OpenRouter when the page opens,
+    // because free models come and go.
+    models: [
+      { id: 'google/gemma-4-31b-it:free', label: 'Gemma 4 31B (free)' },
+      { id: 'qwen/qwen3.7-flash', label: 'Qwen 3.7 Flash (paid, very cheap)' }
+    ],
+    defaultModel: 'google/gemma-4-31b-it:free',
+    help: 'Models marked free cost nothing but have a small daily limit. Qwen models are paid, but cost only fractions of a cent per reply.',
+    keyHelp: 'Create a free key at openrouter.ai/keys.'
+  },
+  qwen: {
+    name: 'Qwen',
+    needsKey: true,
+    chatUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
+    models: [
+      { id: 'qwen-flash', label: 'Qwen Flash (fastest)' },
+      { id: 'qwen-plus', label: 'Qwen Plus (balanced)' },
+      { id: 'qwen-max', label: 'Qwen Max (smartest)' }
+    ],
+    defaultModel: 'qwen-flash',
+    help: 'Qwen Flash answers fastest, which keeps the conversation flowing.',
+    keyHelp: 'Create a key in Alibaba Cloud Model Studio, in the International (Singapore) region. New accounts get a free trial quota.'
+  },
+  openai: {
+    name: 'OpenAI',
+    needsKey: true,
+    chatUrl: 'https://api.openai.com/v1/chat/completions',
+    models: [
+      { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
+      { id: 'gpt-4o', label: 'GPT-4o' }
+    ],
+    defaultModel: 'gpt-4o-mini',
+    keyHelp: 'Get a key at platform.openai.com/api-keys'
+  },
+  demo: {
+    name: 'Demo',
+    needsKey: false,
+    chatUrl: '',
+    models: [],
+    defaultModel: '',
+    help: 'Offline mode with canned responses.'
+  }
+};
+
+const state = {
+  screen: 'landing',
+  chosenScenarioId: 'random',
+  scenario: null,
+  messages: [],
+  learnerSentences: [],
+  corrections: [],
+  speechConfidences: [],
+  turns: 0,
+  startedAt: null,
+  elapsedTimer: null,
+  // Goes up by one every time a conversation starts or ends.
+  // Slow work (an AI reply, speech) checks it, so it cannot affect a session that is already over.
+  sessionId: 0,
+  isAISpeaking: false,
+  isThinking: false,
+  isListening: false,
+  recognition: null,
+  micPermissionGranted: false,
+  micBlocked: false,
+  recognitionManuallyStopped: false,
+  // Groq Whisper listening: the open microphone, its volume meter and the turn being recorded.
+  micStream: null,
+  audioContext: null,
+  volumeMeter: null,
+  recordingTurn: null,
+  noiseLevel: 0.005,
+  lastAIReply: '',
+  // Repeat-after-me: the correction being practised, the tutor reply that waits until it is done,
+  // the tip card on screen, and the "your turn" line inside that card.
+  repeatTarget: null,
+  pendingReply: null,
+  lastTipCard: null,
+  repeatPromptElement: null,
+  // Set when the learner taps the round button while the tutor talks: stay quiet until their turn.
+  skipSpeechRequested: false,
+  // Review cards on the Progress page.
+  review: { cards: [], index: 0 },
+  currentUtterance: null,
+  voices: [],
+  settings: {
+    provider: 'groq',
+    model: 'openai/gpt-oss-120b',
+    apiKeys: {},
+    level: 'intermediate',
+    // The language the tutor uses to explain mistakes. The role-play itself always stays in English.
+    tipLanguage: 'bangla',
+    speakTips: true,
+    // 'whisper' (Groq Whisper, more accurate) or 'browser' (the browser's built-in recognition).
+    speechEngine: 'whisper',
+    repeatPractice: true,
+    voiceURI: '',
+    rate: 1,
+    lang: 'en-US'
+  }
+};
+
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => document.querySelectorAll(s);
+
+function showScreen(name) {
+  ['landing','convo','feedback','progress'].forEach(n => {
+    document.getElementById('screen-' + n).classList.toggle('hidden-screen', n !== name);
+  });
+  state.screen = name;
+}
+
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 4000);
+}
+
+function wait(milliseconds) {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+/* ---------- Settings ---------- */
+
+// Each provider keeps its own key, so switching provider never sends one company's key to another.
+// A key saved in Settings wins; otherwise the key written in FILE_API_KEYS is used.
+function getApiKeyFor(provider) {
+  const savedKey = state.settings.apiKeys[provider] || '';
+  if (savedKey) return savedKey;
+  return FILE_API_KEYS[provider] || '';
+}
+
+function getApiKey() {
+  return getApiKeyFor(state.settings.provider);
+}
+
+// Remember the key typed in Settings for this provider.
+// A key that is the same as the one in FILE_API_KEYS is not stored,
+// so changing the key in the file later still takes effect.
+function rememberTypedKey(provider) {
+  const typedKey = $('#apiKey').value.trim();
+  const fileKey = FILE_API_KEYS[provider] || '';
+  state.settings.apiKeys[provider] = typedKey === fileKey ? '' : typedKey;
+}
+
+// Explain in Settings where the key comes from, so it is clear where to change it.
+function updateKeySource() {
+  const provider = state.settings.provider;
+  const savedKey = state.settings.apiKeys[provider] || '';
+  const fileKey = FILE_API_KEYS[provider] || '';
+
+  let message = '';
+  if (savedKey) {
+    message = 'Using the key saved in this browser. To use the key from the file again, clear this field and press Save.';
+  } else if (fileKey) {
+    message = 'Using the key written in the file (FILE_API_KEYS at the top of the code). Type a different key here and press Save to override it.';
+  }
+  $('#keySource').textContent = message;
+}
+
+// OpenRouter's free models change often, so load the current list instead of trusting fixed model IDs.
+// The list shows every free model first, then the Qwen models (paid, cheapest first).
+async function loadOpenRouterModels() {
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/models');
+    if (!res.ok) throw new Error('Model list request failed: ' + res.status);
+    const payload = await res.json();
+    const allModels = payload.data || [];
+
+    const freeModels = allModels.filter(m => String(m.id || '').endsWith(':free'));
+    const paidQwenModels = allModels.filter(m => {
+      const id = String(m.id || '');
+      return id.startsWith('qwen/') && !id.endsWith(':free');
+    });
+    paidQwenModels.sort((a, b) => Number(a.pricing?.completion) - Number(b.pricing?.completion));
+
+    const freeOptions = freeModels.map(m => {
+      const name = m.name || m.id;
+      const nameSaysFree = name.toLowerCase().includes('free');
+      return { id: m.id, label: nameSaysFree ? name : name + ' (free)' };
+    });
+    const qwenOptions = paidQwenModels.map(m => {
+      const dollarsPerMillionTokens = Number(m.pricing?.completion) * 1000000;
+      return { id: m.id, label: `${m.name || m.id} (paid, $${dollarsPerMillionTokens.toFixed(2)} per 1M output tokens)` };
+    });
+    const models = freeOptions.concat(qwenOptions);
+    if (!models.length) return;
+
+    PROVIDERS.openrouter.models = models;
+    const defaultStillListed = models.some(m => m.id === PROVIDERS.openrouter.defaultModel);
+    if (!defaultStillListed) PROVIDERS.openrouter.defaultModel = models[0].id;
+
+    // Only refresh the settings screen when OpenRouter is the chosen provider.
+    // Otherwise this would overwrite the model chosen for Qwen or OpenAI.
+    if (state.settings.provider === 'openrouter') {
+      updateProviderUI();
+      updateProviderChip();
+    }
+  } catch (err) {
+    console.warn('Could not refresh the OpenRouter model list; using the fallback list.', err);
+    const help = $('#modelHelp');
+    if (help && state.settings.provider === 'openrouter') help.textContent = 'Could not load the latest model list. If a model fails, reopen Settings and pick another one.';
+  }
+}
+
+// Groq also changes its models over time, so ask Groq which models this key can use.
+// Groq only shares its model list with a valid key, so this runs once a key is saved.
+async function loadGroqModels() {
+  const groqKey = getApiKeyFor('groq');
+  if (!groqKey) return;
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/models', {
+      headers: { 'Authorization': 'Bearer ' + groqKey }
+    });
+    if (!res.ok) throw new Error('Model list request failed: ' + res.status);
+    const payload = await res.json();
+
+    // Skip speech-to-text, text-to-speech and safety-filter models. They cannot chat.
+    const nonChatWords = ['whisper', 'tts', 'orpheus', 'playai', 'guard'];
+    const chatModels = (payload.data || []).filter(m => {
+      const id = String(m.id || '').toLowerCase();
+      const isActive = m.active !== false;
+      const isChatModel = !nonChatWords.some(word => id.includes(word));
+      return isActive && isChatModel;
+    });
+    if (!chatModels.length) return;
+
+    PROVIDERS.groq.models = chatModels.map(m => ({ id: m.id, label: m.id }));
+    const defaultStillListed = chatModels.some(m => m.id === PROVIDERS.groq.defaultModel);
+    if (!defaultStillListed) PROVIDERS.groq.defaultModel = chatModels[0].id;
+
+    // Only refresh the settings screen when Groq is the chosen provider.
+    if (state.settings.provider === 'groq') {
+      updateProviderUI();
+      updateProviderChip();
+    }
+  } catch (err) {
+    console.warn('Could not load the Groq model list; using the fallback list.', err);
+  }
+}
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem('voxly.settings');
+    if (raw) Object.assign(state.settings, JSON.parse(raw));
+  } catch (e) {
+    console.warn('Saved settings could not be read; using the defaults.', e);
+  }
+
+  // Older versions saved one key for every provider. Keep it for the provider it was used with.
+  if (!state.settings.apiKeys) state.settings.apiKeys = {};
+  if (state.settings.apiKey) {
+    state.settings.apiKeys[state.settings.provider] = state.settings.apiKey;
+    delete state.settings.apiKey;
+  }
+
+  // A key saved in the browser that is the same as the file's key is not needed.
+  // Forget it, so a later change in FILE_API_KEYS takes effect.
+  Object.keys(FILE_API_KEYS).forEach(provider => {
+    const savedKeyMatchesFile = state.settings.apiKeys[provider] === FILE_API_KEYS[provider];
+    if (savedKeyMatchesFile) state.settings.apiKeys[provider] = '';
+  });
+
+  // Pollinations was removed: it now blocks requests that come from web pages.
+  const savedProviderExists = Boolean(PROVIDERS[state.settings.provider]);
+  if (!savedProviderExists) state.settings.provider = 'groq';
+
+  const savedLevelExists = Boolean(LEVELS[state.settings.level]);
+  if (!savedLevelExists) state.settings.level = 'intermediate';
+
+  const knownTipLanguages = ['bangla', 'english'];
+  const savedTipLanguageExists = knownTipLanguages.includes(state.settings.tipLanguage);
+  if (!savedTipLanguageExists) state.settings.tipLanguage = 'bangla';
+
+  const knownSpeechEngines = ['whisper', 'browser'];
+  const savedSpeechEngineExists = knownSpeechEngines.includes(state.settings.speechEngine);
+  if (!savedSpeechEngineExists) state.settings.speechEngine = 'whisper';
+
+  $('#speechEngine').value = state.settings.speechEngine;
+  $('#repeatPractice').checked = Boolean(state.settings.repeatPractice);
+  $('#rate').value = state.settings.rate;
+  $('#lang').value = state.settings.lang;
+  $('#level').value = state.settings.level;
+  $('#tipLanguage').value = state.settings.tipLanguage;
+  $('#speakTips').checked = Boolean(state.settings.speakTips);
+  $('#apiKey').value = getApiKey();
+  updateProviderUI();
+  updateProviderChip();
+  syncQuickSettings();
+}
+
+// Save the settings in this browser. Returns false when the browser refuses (for example in a private window).
+function storeSettings() {
+  try {
+    localStorage.setItem('voxly.settings', JSON.stringify(state.settings));
+    return true;
+  } catch (e) {
+    console.warn('Settings could not be stored in this browser.', e);
+    return false;
+  }
+}
+
+// The home screen has two quick settings (level and explanation language).
+// Keep them in step with the Settings panel.
+function syncQuickSettings() {
+  $('#quickLevel').value = state.settings.level;
+  $('#quickTipLanguage').value = state.settings.tipLanguage;
+}
+
+function onQuickSettingChanged() {
+  state.settings.level = $('#quickLevel').value;
+  state.settings.tipLanguage = $('#quickTipLanguage').value;
+  $('#level').value = state.settings.level;
+  $('#tipLanguage').value = state.settings.tipLanguage;
+  updateTipVoiceHelp();
+  storeSettings();
+}
+
+function saveSettings() {
+  rememberTypedKey(state.settings.provider);
+  const modelIsShown = $('#modelBlock').style.display !== 'none';
+  if (modelIsShown && $('#modelSelect').value) state.settings.model = $('#modelSelect').value;
+  state.settings.rate = parseFloat($('#rate').value);
+  state.settings.lang = $('#lang').value;
+  state.settings.level = $('#level').value;
+  state.settings.tipLanguage = $('#tipLanguage').value;
+  state.settings.speakTips = $('#speakTips').checked;
+  state.settings.speechEngine = $('#speechEngine').value;
+  state.settings.repeatPractice = $('#repeatPractice').checked;
+  state.settings.voiceURI = $('#voiceSelect').value;
+  const stored = storeSettings();
+  if (stored) {
+    toast('Settings saved');
+  } else {
+    toast('Settings applied, but this browser would not store them for next time.');
+  }
+  syncQuickSettings();
+  updateProviderChip();
+  updateKeySource();
+  closeSettings();
+  if (state.settings.provider === 'groq') loadGroqModels();
+}
+
+function updateProviderUI() {
+  $$('.provider-card').forEach(c => {
+    c.classList.toggle('selected', c.dataset.provider === state.settings.provider);
+  });
+  const prov = PROVIDERS[state.settings.provider];
+
+  $('#keyBlock').style.display = prov.needsKey ? '' : 'none';
+  $('#keyHelp').textContent = prov.keyHelp || '';
+  updateKeySource();
+
+  const modelBlock = $('#modelBlock');
+  const modelSelect = $('#modelSelect');
+  const modelHelp = $('#modelHelp');
+  if (prov.models.length === 0) {
+    modelBlock.style.display = 'none';
+  } else {
+    modelBlock.style.display = '';
+    modelSelect.innerHTML = '';
+    prov.models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.label;
+      modelSelect.appendChild(opt);
+    });
+    const valid = prov.models.find(m => m.id === state.settings.model);
+    modelSelect.value = valid ? valid.id : prov.defaultModel;
+    state.settings.model = modelSelect.value;
+    modelHelp.textContent = prov.help || '';
+  }
+}
+
+function updateProviderChip() {
+  const prov = PROVIDERS[state.settings.provider];
+  const model = prov.models.find(m => m.id === state.settings.model);
+  $('#providerChipText').textContent = `${prov.name}${model ? ' · ' + model.label : ''}`;
+}
+
+function openSettings() {
+  $('#settingsDrawer').classList.remove('hidden');
+  if (window.lucide) lucide.createIcons();
+}
+function closeSettings() { $('#settingsDrawer').classList.add('hidden'); }
+
+/* ---------- Voice output (the AI speaking) ---------- */
+
+function populateVoices() {
+  const all = speechSynthesis.getVoices();
+  const english = all.filter(v => /^en(-|_)/i.test(v.lang));
+  const list = english.length ? english : all;
+  state.voices = list;
+  const sel = $('#voiceSelect');
+  sel.innerHTML = '';
+  list.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v.voiceURI;
+    opt.textContent = `${v.name} — ${v.lang}${v.default ? ' (default)' : ''}`;
+    sel.appendChild(opt);
+  });
+  if (state.settings.voiceURI && list.find(v => v.voiceURI === state.settings.voiceURI)) {
+    sel.value = state.settings.voiceURI;
+  }
+  updateTipVoiceHelp();
+}
+if (typeof speechSynthesis !== 'undefined') {
+  speechSynthesis.onvoiceschanged = populateVoices;
+}
+
+// Not every browser has a Bangla voice (Chrome on Linux usually has none,
+// Microsoft Edge usually has one). Returns null when there is none.
+function findBanglaVoice() {
+  const allVoices = speechSynthesis.getVoices();
+  return allVoices.find(voice => /^bn/i.test(voice.lang)) || null;
+}
+
+// Tell the user in Settings whether the Bangla explanation can be read aloud or only shown.
+function updateTipVoiceHelp() {
+  const help = $('#tipVoiceHelp');
+  const wantsBangla = $('#tipLanguage').value === 'bangla';
+  if (!wantsBangla) {
+    help.textContent = 'After a mistake, the explanation and the better sentence are read aloud.';
+    return;
+  }
+  const banglaVoice = findBanglaVoice();
+  if (banglaVoice) {
+    help.textContent = `Bangla voice found (${banglaVoice.name}). The explanation is read in Bangla, then the better sentence in English.`;
+  } else {
+    help.textContent = 'This browser has no Bangla voice, so the Bangla explanation is shown on screen and only the better English sentence is read aloud. Microsoft Edge usually has Bangla voices.';
+  }
+}
+
+// Split after ".", "!", "?" or the Bangla full stop "।" when a space follows,
+// so a price like "$4.50" stays in one piece.
+function splitIntoSentences(text) {
+  const sentences = String(text).split(/(?<=[.!?।])\s+/);
+  return sentences.map(sentence => sentence.trim()).filter(Boolean);
+}
+
+// Speak the text one sentence at a time.
+// Chrome can stop long speech halfway and never report that it finished,
+// which used to freeze the whole conversation. Short pieces avoid that.
+// voiceLanguage is 'english' (the voice chosen in Settings) or 'bangla'.
+// speedFactor below 1 speaks more slowly (used by the "Slowly" button).
+async function speak(text, voiceLanguage = 'english', speedFactor = 1) {
+  if (!('speechSynthesis' in window)) {
+    console.warn('Speech synthesis not supported');
+    return;
+  }
+  // The learner tapped "skip": say nothing more until it is their turn again.
+  if (state.skipSpeechRequested) return;
+  const sessionId = state.sessionId;
+
+  // Keep the microphone off while the AI talks, so it does not hear itself.
+  stopListening();
+  state.isAISpeaking = true;
+  $('#waveWrap').style.display = 'flex';
+  stopAllSpeech();
+
+  for (const sentence of splitIntoSentences(text)) {
+    const sessionEnded = sessionId !== state.sessionId;
+    if (sessionEnded || state.skipSpeechRequested) break;
+    await speakWithBrowserVoice(sentence, voiceLanguage, speedFactor);
+  }
+
+  // If the session ended meanwhile, endConversation() has already reset these.
+  if (sessionId === state.sessionId) {
+    state.isAISpeaking = false;
+    $('#waveWrap').style.display = 'none';
+  }
+}
+
+function speakWithBrowserVoice(sentence, voiceLanguage, speedFactor = 1) {
+  return new Promise((resolve) => {
+    const utterance = new SpeechSynthesisUtterance(sentence);
+    if (voiceLanguage === 'bangla') {
+      const banglaVoice = findBanglaVoice();
+      if (banglaVoice) utterance.voice = banglaVoice;
+      utterance.lang = banglaVoice ? banglaVoice.lang : 'bn-BD';
+    } else {
+      const chosenVoice = state.voices.find(v => v.voiceURI === state.settings.voiceURI);
+      if (chosenVoice) utterance.voice = chosenVoice;
+      utterance.lang = state.settings.lang;
+    }
+    utterance.rate = (parseFloat(state.settings.rate) || 1) * speedFactor;
+    utterance.pitch = 1;
+
+    let finished = false;
+    let safetyTimer = null;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(safetyTimer);
+      resolve();
+    };
+
+    // Safety net: if the browser never reports the end of the speech, stop it and move on.
+    const wordCount = sentence.split(/\s+/).length;
+    const longestExpectedMs = 5000 + (wordCount * 700) / utterance.rate;
+    safetyTimer = setTimeout(() => {
+      console.warn('Speech took too long; moving on.');
+      speechSynthesis.cancel();
+      finish();
+    }, longestExpectedMs);
+
+    utterance.onstart = () => setPhase('ai-speaking', 'Tutor is speaking…');
+    utterance.onend = finish;
+    utterance.onerror = (event) => {
+      const wasStoppedOnPurpose = event.error === 'interrupted' || event.error === 'canceled';
+      if (!wasStoppedOnPurpose) console.error('Speech error:', event.error);
+      finish();
+    };
+
+    // Keep a reference. Otherwise Chrome can throw the utterance away early and never call onend.
+    state.currentUtterance = utterance;
+    speechSynthesis.speak(utterance);
+  });
+}
+
+// Stop whatever the AI is saying right now.
+function stopAllSpeech() {
+  if ('speechSynthesis' in window) {
+    speechSynthesis.cancel();
+  }
+}
+
+/* ---------- Voice input (the learner speaking) ---------- */
+
+// When the page is opened as a file (file://), the browser cannot remember the microphone
+// permission, so it asks again every time the app starts listening.
+// Show the user how to open the page through a local web address instead.
+function showFileWarningIfNeeded() {
+  const openedAsFile = window.location.protocol === 'file:';
+  if (!openedAsFile) return;
+
+  const fullPath = decodeURIComponent(window.location.pathname);
+  const lastSlash = fullPath.lastIndexOf('/');
+  const folder = fullPath.slice(0, lastSlash) || '/';
+  const fileName = fullPath.slice(lastSlash + 1);
+
+  $('#fileWarningCommand').textContent = `cd "${folder}" && python3 -m http.server 8000`;
+  $('#fileWarningAddress').textContent = `http://localhost:8000/${encodeURIComponent(fileName)}`;
+  $('#fileWarning').classList.remove('hidden');
+}
+
+function showMicrophoneError(err) {
+  if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+    toast('Microphone is blocked. Set this site’s Microphone permission to Allow in browser settings.');
+  } else if (err.name === 'NotFoundError') {
+    toast('No microphone found. Connect a microphone and try again.');
+  } else {
+    toast('Could not access microphone: ' + (err.message || err.name));
+  }
+}
+
+async function ensureMicrophonePermission() {
+  if (state.micPermissionGranted) return true;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    toast('Microphone access requires HTTPS or http://localhost in a supported browser.');
+    return false;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    state.micPermissionGranted = true;
+    stream.getTracks().forEach(track => track.stop());
+    return true;
+  } catch (err) {
+    console.error('Microphone permission error:', err);
+    state.micPermissionGranted = false;
+    showMicrophoneError(err);
+    return false;
+  }
+}
+
+function buildRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return null;
+  const r = new SR();
+  r.lang = state.settings.lang;
+  r.interimResults = true;
+  r.continuous = false;
+  r.maxAlternatives = 1;
+  let finalTranscript = '';
+
+  r.onstart = () => {
+    // Start every turn with an empty transcript.
+    // Without this reset, words from earlier turns were sent to the AI again.
+    finalTranscript = '';
+    state.isListening = true;
+    state.recognitionManuallyStopped = false;
+    setPhase('user-listening', getListeningLabel());
+    $('#micWrap').classList.add('listening');
+  };
+  r.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const bestGuess = e.results[i][0];
+      if (e.results[i].isFinal) {
+        finalTranscript += bestGuess.transcript + ' ';
+        // How sure the browser is about the words it heard. Used for the pronunciation score.
+        if (bestGuess.confidence > 0) state.speechConfidences.push(bestGuess.confidence);
+      } else {
+        interim += bestGuess.transcript;
+      }
+    }
+    updateLiveTranscript((finalTranscript + interim).trim());
+  };
+  r.onend = () => {
+    state.isListening = false;
+    $('#micWrap').classList.remove('listening');
+    clearLiveTranscript();
+    if (state.recognitionManuallyStopped || state.screen !== 'convo') return;
+
+    // A serious microphone problem was already shown. Wait until the user taps the mic.
+    if (state.micBlocked) return;
+
+    const text = finalTranscript.trim();
+    if (!text) {
+      // Nothing was heard. Listen again straight away, so the conversation never stops.
+      setTimeout(startListening, 300);
+      return;
+    }
+    setPhase('processing', 'Processing…');
+    handleHeardText(text);
+  };
+  r.onerror = (e) => {
+    state.isListening = false;
+    $('#micWrap').classList.remove('listening');
+    clearLiveTranscript();
+
+    // Silence, or we stopped the mic ourselves. onend runs next and handles it.
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
+
+    // Any other error would just happen again, so stop listening automatically
+    // and let the user tap the mic once the problem is fixed.
+    state.micBlocked = true;
+    setPhase('waiting', 'Tap the mic to try again.');
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      state.micPermissionGranted = false;
+      toast('Microphone permission is blocked. Allow it for this site, then tap the mic.');
+    } else if (e.error === 'network') {
+      toast('Speech recognition could not reach its online service. It works best in Google Chrome or Microsoft Edge.');
+    } else if (e.error === 'audio-capture') {
+      toast('No microphone found. Connect a microphone, then tap the mic.');
+    } else {
+      toast('Mic error: ' + e.error + '. Tap the mic to try again.');
+    }
+  };
+  return r;
+}
+
+async function startListening() {
+  const isBusy = state.isListening || state.isAISpeaking || state.isThinking;
+  if (state.screen !== 'convo' || isBusy) return;
+
+  // The learner's turn starts, so an earlier "skip" tap no longer applies.
+  state.skipSpeechRequested = false;
+
+  if (shouldUseWhisper()) {
+    await startWhisperListening();
+  } else {
+    await startBrowserListening();
+  }
+}
+
+// The browser's built-in speech recognition (used when Whisper is off or not available).
+async function startBrowserListening() {
+  const hasMicrophone = await ensureMicrophonePermission();
+  if (!hasMicrophone) {
+    state.micBlocked = true;
+    setPhase('waiting', 'Tap the mic to try again.');
+    return;
+  }
+
+  if (!state.recognition) state.recognition = buildRecognition();
+  if (!state.recognition) {
+    toast('Speech recognition is not supported. Try Chrome or Edge.');
+    return;
+  }
+  try {
+    state.recognitionManuallyStopped = false;
+    state.recognition.lang = state.settings.lang;
+    state.recognition.start();
+  } catch (err) {
+    // InvalidStateError only means the mic is already listening.
+    if (err.name !== 'InvalidStateError') {
+      console.error('Recognition start error:', err);
+      toast('Could not start microphone: ' + (err.message || err.name));
+      setPhase('waiting', 'Tap the mic to try again.');
+    }
+  }
+}
+
+function stopListening() {
+  state.recognitionManuallyStopped = true;
+  if (state.recognition) {
+    try { state.recognition.abort(); } catch (_) {}
+  }
+  discardWhisperRecording();
+  state.isListening = false;
+  $('#micWrap').classList.remove('listening');
+  clearLiveTranscript();
+}
+
+// The big round button does whatever fits the moment:
+// - while the tutor is talking: skip the rest, so the learner can answer straight away;
+// - while the learner is talking: "I have finished speaking";
+// - otherwise: start listening (for example after a microphone error).
+function onMicTapped() {
+  if (state.screen !== 'convo') return;
+
+  if (state.isAISpeaking) {
+    state.skipSpeechRequested = true;
+    stopAllSpeech();
+    return;
+  }
+
+  const turn = state.recordingTurn;
+  if (turn) {
+    // Send what was recorded, even if it was too quiet for the volume meter to notice.
+    turn.heardSpeech = true;
+    finishWhisperTurn(turn);
+    return;
+  }
+
+  const browserIsListening = state.isListening && state.recognition && !shouldUseWhisper();
+  if (browserIsListening) {
+    // Ask the browser to finish now; its onend handler then sends the words.
+    state.recognition.stop();
+    return;
+  }
+
+  state.micBlocked = false;
+  const volumeMeterIsPaused = state.audioContext && state.audioContext.state === 'suspended';
+  if (volumeMeterIsPaused) state.audioContext.resume();
+  startListening();
+}
+
+// "Hear again slowly": the tutor's last sentence at a slower speed.
+function replayLastReply() {
+  if (!state.lastAIReply) return;
+  replayText(state.lastAIReply, 0.75);
+}
+
+// Space bar = the big round button, for practising on a computer.
+function onKeyDown(event) {
+  if (event.code !== 'Space' || event.repeat) return;
+  const typingInAField = ['INPUT', 'SELECT', 'TEXTAREA'].includes(event.target.tagName);
+  if (typingInAField || state.screen !== 'convo') return;
+  event.preventDefault();
+  onMicTapped();
+}
+
+/* ---------- Voice input with Groq Whisper (more accurate) ---------- */
+
+// Whisper understands accents much better than the browser's built-in recognition.
+// It needs the Groq key, and the browser must be able to record audio.
+function shouldUseWhisper() {
+  const wantsWhisper = state.settings.speechEngine === 'whisper';
+  const hasGroqKey = Boolean(getApiKeyFor('groq'));
+  const canRecord = typeof MediaRecorder !== 'undefined' && Boolean(navigator.mediaDevices);
+  return wantsWhisper && hasGroqKey && canRecord;
+}
+
+// Open the microphone once and keep it open for the whole conversation,
+// so the browser asks for permission only once.
+async function openMicrophone() {
+  const microphoneIsOpen = state.micStream && state.micStream.getAudioTracks().some(track => track.readyState === 'live');
+  if (microphoneIsOpen) return state.micStream;
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    toast('Microphone access requires HTTPS or http://localhost in a supported browser.');
+    return null;
+  }
+
+  try {
+    state.micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+  } catch (err) {
+    console.error('Microphone error:', err);
+    showMicrophoneError(err);
+    return null;
+  }
+
+  // A volume meter on the microphone, used to notice when the learner stops talking.
+  state.audioContext = new AudioContext();
+  if (state.audioContext.state === 'suspended') state.audioContext.resume();
+  const microphoneSource = state.audioContext.createMediaStreamSource(state.micStream);
+  state.volumeMeter = state.audioContext.createAnalyser();
+  state.volumeMeter.fftSize = 1024;
+  microphoneSource.connect(state.volumeMeter);
+  return state.micStream;
+}
+
+// Turn the microphone off completely, so the browser's recording indicator disappears.
+function closeMicrophone() {
+  discardWhisperRecording();
+  if (state.micStream) {
+    state.micStream.getTracks().forEach(track => track.stop());
+    state.micStream = null;
+  }
+  if (state.audioContext) {
+    state.audioContext.close();
+    state.audioContext = null;
+    state.volumeMeter = null;
+  }
+}
+
+// How loud the microphone is right now: 0 is silence, speech is usually above 0.02.
+function readMicrophoneVolume() {
+  const samples = new Float32Array(state.volumeMeter.fftSize);
+  state.volumeMeter.getFloatTimeDomainData(samples);
+  let sumOfSquares = 0;
+  for (const sample of samples) {
+    sumOfSquares += sample * sample;
+  }
+  return Math.sqrt(sumOfSquares / samples.length);
+}
+
+// Keep a running estimate of the room's background noise.
+// It drops at once when the room is quiet and rises only slowly when it is loud,
+// so a burst of speech barely changes it, but a constant fan noise does.
+function updateNoiseLevel(volume) {
+  if (volume < state.noiseLevel) {
+    state.noiseLevel = volume;
+  } else {
+    state.noiseLevel += (volume - state.noiseLevel) * 0.002;
+  }
+}
+
+async function startWhisperListening() {
+  const microphone = await openMicrophone();
+  if (!microphone) {
+    state.micBlocked = true;
+    setPhase('waiting', 'Tap the mic to try again.');
+    return;
+  }
+
+  // Things may have changed while the microphone was opening.
+  const canStillListen = state.screen === 'convo' && !state.isListening && !state.isAISpeaking && !state.isThinking;
+  if (!canStillListen) return;
+
+  const recorder = new MediaRecorder(microphone);
+  const turn = {
+    recorder,
+    audioChunks: [],
+    startedAt: Date.now(),
+    lastSoundAt: Date.now(),
+    loudMs: 0,
+    heardSpeech: false,
+    discarded: false,
+    volumeTimer: null
+  };
+  state.recordingTurn = turn;
+
+  recorder.ondataavailable = (event) => {
+    if (event.data && event.data.size > 0) turn.audioChunks.push(event.data);
+  };
+  recorder.onstop = () => onWhisperRecordingStopped(turn);
+  recorder.start();
+
+  state.isListening = true;
+  setPhase('user-listening', getListeningLabel());
+  $('#micWrap').classList.add('listening');
+  turn.volumeTimer = setInterval(() => checkWhisperVolume(turn), VOLUME_CHECK_MS);
+}
+
+// Runs 10 times a second while recording. It notices when the learner starts talking,
+// and ends the turn after a short silence.
+function checkWhisperVolume(turn) {
+  const volume = readMicrophoneVolume();
+  const now = Date.now();
+
+  updateNoiseLevel(volume);
+  const speechVolume = Math.max(MIN_SPEECH_VOLUME, state.noiseLevel * 3);
+  const isSpeaking = volume > speechVolume;
+  if (isSpeaking) {
+    turn.lastSoundAt = now;
+    turn.loudMs += VOLUME_CHECK_MS;
+  }
+
+  // Ignore short bumps and clicks: real speech lasts at least a moment.
+  if (!turn.heardSpeech && turn.loudMs >= MIN_SPEECH_MS) {
+    turn.heardSpeech = true;
+    setPhase('user-listening', 'I hear you… tap ✓ when you finish');
+  }
+
+  const silentMs = now - turn.lastSoundAt;
+  const finishedTalking = turn.heardSpeech && silentMs >= SILENCE_TO_END_TURN_MS;
+  const recordedTooLong = now - turn.startedAt >= MAX_TURN_MS;
+  if (finishedTalking || recordedTooLong) finishWhisperTurn(turn);
+}
+
+// Stop recording. The recorder's onstop handler then sends the audio to Whisper.
+function finishWhisperTurn(turn) {
+  clearInterval(turn.volumeTimer);
+  if (turn.recorder.state !== 'inactive') turn.recorder.stop();
+}
+
+// Stop recording without sending anything, for example when the AI starts talking.
+function discardWhisperRecording() {
+  const turn = state.recordingTurn;
+  if (!turn) return;
+  turn.discarded = true;
+  finishWhisperTurn(turn);
+  state.recordingTurn = null;
+}
+
+async function onWhisperRecordingStopped(turn) {
+  if (turn.discarded) return;
+  if (state.recordingTurn === turn) state.recordingTurn = null;
+  state.isListening = false;
+  $('#micWrap').classList.remove('listening');
+  if (state.screen !== 'convo') return;
+
+  if (!turn.heardSpeech) {
+    // Nobody spoke. Listen again straight away, so the conversation never stops.
+    setTimeout(startListening, 300);
+    return;
+  }
+
+  const sessionId = state.sessionId;
+  state.isThinking = true;
+  setPhase('processing', 'Understanding what you said…');
+
+  let text = '';
+  try {
+    const audio = new Blob(turn.audioChunks, { type: turn.recorder.mimeType || 'audio/webm' });
+    text = await transcribeWithWhisper(audio);
+    if (!text) toast('I did not catch that. Please say it again.');
+  } catch (error) {
+    console.error('Whisper error:', error);
+    toast(error.message + ' Please say it again.');
+  }
+
+  // The user may have pressed End while Whisper was working.
+  if (sessionId !== state.sessionId) return;
+  state.isThinking = false;
+
+  if (!text) {
+    setTimeout(startListening, 300);
+    return;
+  }
+  handleHeardText(text);
+}
+
+// Send the recorded audio to Groq Whisper and get back the words.
+async function transcribeWithWhisper(audio) {
+  const form = new FormData();
+  form.append('file', audio, 'speech.' + getAudioFileExtension(audio.type));
+  form.append('model', WHISPER_MODEL);
+  form.append('language', 'en');
+  form.append('temperature', '0');
+  form.append('response_format', 'verbose_json');
+  // The tutor's last sentence gives Whisper context, so it picks the right words (for example "latte").
+  // Not during repeat-after-me: there the hint would make Whisper "hear" the right sentence
+  // even when it was not said well, which would make the check too generous.
+  const isRepeatAttempt = Boolean(state.repeatTarget);
+  if (state.lastAIReply && !isRepeatAttempt) form.append('prompt', state.lastAIReply);
+
+  let response;
+  try {
+    response = await fetch(WHISPER_URL, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + getApiKeyFor('groq') },
+      body: form
+    });
+  } catch (networkError) {
+    throw createAIError('Could not reach Groq Whisper. Check your internet connection.', true);
+  }
+  if (!response.ok) {
+    throw await createAIErrorFromResponse('Groq Whisper', response);
+  }
+
+  const data = await response.json();
+  const text = String(data.text || '').trim();
+  const segments = Array.isArray(data.segments) ? data.segments : [];
+
+  if (looksLikeWhisperGhost(text, segments)) return '';
+
+  // How sure Whisper was about the words. Used for the pronunciation score.
+  segments.forEach(segment => {
+    const confidence = Math.exp(segment.avg_logprob);
+    if (Number.isFinite(confidence)) state.speechConfidences.push(confidence);
+  });
+
+  return text;
+}
+
+// In silence or noise, Whisper sometimes "hears" short phrases such as "you" or "Thank you."
+// (Tested: one second of pure silence came back as "you".)
+// A very short result that Whisper itself was unsure about is treated as "nothing was said".
+// A clearly spoken "Thank you" has high confidence, so it still gets through.
+function looksLikeWhisperGhost(text, segments) {
+  const words = normalizeSentence(text);
+  if (!words) return true;
+  if (segments.length === 0) return false;
+
+  const totalLogProb = segments.reduce((sum, segment) => sum + (segment.avg_logprob || 0), 0);
+  const averageLogProb = totalLogProb / segments.length;
+  const whisperWasUnsure = averageLogProb < -0.8;
+  const isVeryShort = words.split(' ').length <= 2;
+  return whisperWasUnsure && isVeryShort;
+}
+
+// Groq needs a file name whose ending matches the audio format the browser recorded.
+function getAudioFileExtension(mimeType) {
+  if (mimeType.includes('mp4')) return 'mp4';
+  if (mimeType.includes('ogg')) return 'ogg';
+  return 'webm';
+}
+
+/* ---------- Transcript ---------- */
+
+// A chat bubble: the tutor on the left, the learner on the right.
+function addTranscript(role, text) {
+  const el = document.getElementById('transcript');
+  const isTutor = role === 'assistant';
+  const row = document.createElement('div');
+  row.className = isTutor ? 'transcript-line bubble-row' : 'transcript-line bubble-row from-you';
+  const bubble = document.createElement('div');
+  bubble.className = isTutor ? 'bubble bubble-ai' : 'bubble bubble-you';
+  bubble.textContent = text;
+  row.append(bubble);
+  if (isTutor) addLineActions(row, text);
+  el.appendChild(row);
+  el.scrollTop = el.scrollHeight;
+}
+
+function addCorrectionToTranscript(correction) {
+  const el = document.getElementById('transcript');
+  const row = document.createElement('div');
+  row.className = 'transcript-line correction-card';
+  let html = '<div class="text-xs font-semibold text-emerald-300 mb-1">Tutor tip</div>';
+  if (correction.better) {
+    html += `<div class="text-sm"><span class="text-[color:var(--muted)]">Better:</span> ${escapeHtml(correction.better)}</div>`;
+  }
+  if (correction.why) {
+    html += `<div lang="${getExplanationLangCode()}" class="text-sm text-[color:var(--text)] mt-1">${escapeHtml(correction.why)}</div>`;
+  }
+  row.innerHTML = html;
+  el.appendChild(row);
+  el.scrollTop = el.scrollHeight;
+  return row;
+}
+
+function updateLiveTranscript(text) {
+  let live = document.getElementById('liveTranscript');
+  if (!live) {
+    live = document.createElement('div');
+    live.id = 'liveTranscript';
+    live.className = 'transcript-line bubble-row from-you opacity-70';
+    document.getElementById('transcript').appendChild(live);
+  }
+  live.innerHTML = `<div class="bubble bubble-you italic">${escapeHtml(text)}<span class="inline-block w-1 h-3 bg-cyan-400 align-middle ml-1 animate-pulse"></span></div>`;
+  document.getElementById('transcript').scrollTop = document.getElementById('transcript').scrollHeight;
+}
+
+function clearLiveTranscript() {
+  const live = document.getElementById('liveTranscript');
+  if (live) live.remove();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// What the status pill and the round button show in each phase,
+// so the learner always knows whether to speak, listen or wait.
+const PHASE_DETAILS = {
+  'user-listening': { hint: 'Tap ✓ or press Space when you finish speaking', bangla: 'এখন ইংরেজিতে বলুন' },
+  'ai-speaking': { hint: 'Tap the button or press Space to skip and answer now', bangla: 'মন দিয়ে শুনুন' },
+  'processing': { hint: 'Please wait a moment', bangla: 'একটু অপেক্ষা করুন' },
+  'waiting': { hint: 'Tap the button or press Space to speak', bangla: '' }
+};
+
+function setPhase(kind, text) {
+  const phase = PHASE_DETAILS[kind] ? kind : 'waiting';
+  const details = PHASE_DETAILS[phase];
+  const showBangla = state.settings.tipLanguage === 'bangla';
+
+  $('#phaseText').textContent = text;
+  $('#phaseBangla').textContent = showBangla ? details.bangla : '';
+  $('#phaseLabel').dataset.kind = phase;
+  $('#micWrap').dataset.phase = phase;
+  $('#micHint').textContent = details.hint;
+
+  // "Help me answer" and "Hear again" only make sense when it is the learner's turn.
+  const isLearnersTurn = phase === 'user-listening' || phase === 'waiting';
+  $('#helpBtn').disabled = !isLearnersTurn;
+  $('#replayBtn').disabled = !isLearnersTurn;
+}
+
+// Useful phrases: tap one to hear how it sounds.
+function renderPhrases(phrases) {
+  const list = $('#phraseList');
+  list.innerHTML = '';
+  phrases.forEach(phrase => {
+    const item = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'w-full text-left px-2 py-1.5 rounded-lg hover:bg-white/5 flex items-center gap-2';
+    button.innerHTML = `<span class="text-violet-300">🔊</span><span>${escapeHtml(phrase)}</span>`;
+    button.addEventListener('click', () => replayText(phrase, 1));
+    item.append(button);
+    list.append(item);
+  });
+}
+
+/* ---------- Conversation ---------- */
+
+function selectScenario(scenarioId) {
+  state.chosenScenarioId = scenarioId;
+  $$('.scenario-card').forEach(card => {
+    card.classList.toggle('selected', card.dataset.scenario === scenarioId);
+  });
+}
+
+function pickScenario() {
+  const chosenScenario = SCENARIOS.find(s => s.id === state.chosenScenarioId);
+  if (chosenScenario) return chosenScenario;
+  return SCENARIOS[Math.floor(Math.random() * SCENARIOS.length)];
+}
+
+async function startConversation() {
+  try {
+    const prov = PROVIDERS[state.settings.provider];
+    if (prov.needsKey && !getApiKey()) {
+      toast(`Please add your ${prov.name} API key in Settings.`);
+      openSettings();
+      $('#advancedSettings').open = true;
+      return;
+    }
+
+    if (!('speechSynthesis' in window)) {
+      toast('Speech synthesis not supported in this browser.');
+      return;
+    }
+
+    const useWhisper = shouldUseWhisper();
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!useWhisper && !SR) {
+      toast('Speech recognition not supported. Try Chrome or Edge, or choose Groq Whisper in Settings.');
+      return;
+    }
+
+    // Whisper keeps the microphone open for the whole session.
+    // The browser's recognition only needs the permission to be granted.
+    const microphoneReady = useWhisper ? Boolean(await openMicrophone()) : await ensureMicrophonePermission();
+    if (!microphoneReady) return;
+
+    state.sessionId += 1;
+    const sessionId = state.sessionId;
+
+    state.scenario = pickScenario();
+    // Some models on OpenRouter do not accept a "system" message,
+    // so the tutor instructions go into the first user message instead.
+    state.messages = [
+      { role: 'user', content: buildTutorPrompt(state.scenario) + '\n\nStart the role-play now.' }
+    ];
+    state.learnerSentences = [];
+    state.corrections = [];
+    state.speechConfidences = [];
+    state.turns = 0;
+    state.micBlocked = false;
+    state.isThinking = false;
+    state.repeatTarget = null;
+    state.pendingReply = null;
+    state.lastTipCard = null;
+    state.repeatPromptElement = null;
+    state.skipSpeechRequested = false;
+    hideAnswerIdeas();
+    state.startedAt = Date.now();
+
+    $('#scenarioTitle').textContent = state.scenario.title;
+    $('#scenarioDesc').textContent = state.scenario.desc;
+    $('#transcript').innerHTML = '';
+    $('#turnCount').textContent = '0';
+    $('#correctionCount').textContent = '0';
+    renderPhrases(state.scenario.phrases);
+    showScreen('convo');
+    startElapsedTimer();
+
+    const firstTurn = { correction: '', better: '', reply: state.scenario.aiFirst };
+    saveAssistantTurn(firstTurn);
+    addTranscript('assistant', firstTurn.reply);
+    await speak(firstTurn.reply);
+
+    const sessionEnded = sessionId !== state.sessionId;
+    if (sessionEnded) return;
+    startListening();
+  } catch (e) {
+    console.error('startConversation error:', e);
+    toast('Error starting conversation: ' + e.message);
+  }
+}
+
+// The tutor explains mistakes in the language chosen in Settings. Everything else stays in English.
+function getExplanationLanguageName() {
+  const explainInBangla = state.settings.tipLanguage === 'bangla';
+  return explainInBangla ? 'simple, everyday Bangla (Bengali script, as spoken in Bangladesh)' : 'simple English';
+}
+
+// Language code for the explanation text, so the browser shows Bangla letters correctly.
+function getExplanationLangCode() {
+  return state.settings.tipLanguage === 'bangla' ? 'bn' : 'en';
+}
+
+function buildTutorPrompt(scenario) {
+  const levelInstructions = LEVELS[state.settings.level] || LEVELS.intermediate;
+  const explanationLanguage = getExplanationLanguageName();
+  return `You are a friendly, encouraging English tutor. You help the learner practise speaking English through a role-play.
+Scenario: ${scenario.title}.
+Context: ${scenario.desc}
+${levelInstructions}
+
+On every turn:
+1. Check the learner's last message for grammar mistakes, wrong words or unnatural phrasing. The text comes from speech recognition, so ignore punctuation, capital letters and small spelling issues.
+2. Continue the role-play in character (waiter, coworker, shop assistant, friend, taxi driver and so on).
+
+Answer ONLY with JSON in exactly this shape, with no other text:
+{"correction": "", "better": "", "reply": ""}
+
+- "correction": teach the most important mistake in ${explanationLanguage}. Use 1 or 2 short, kind sentences: say what was wrong and the simple rule to remember. Use "" if the message was fine.
+- "better": a more natural way to say the learner's whole message, always in English. Use "" if it was already natural.
+- "reply": your in-character answer, always in English. 1 to 3 short sentences, usually ending with a question so the conversation continues. Do not mention corrections, JSON, or that you are an AI here.
+- If the learner says "stop", "that's all" or "I'm done", give a short, friendly goodbye in "reply".`;
+}
+
+// End the chat only when the whole sentence is a stop phrase.
+// Otherwise "Can you stop here, please?" in the taxi scenario would end the conversation.
+function isStopRequest(text) {
+  return STOP_PHRASES.includes(normalizeSentence(text));
+}
+
+// Lowercase text without punctuation, so "Stop." and "stop" count as the same.
+function normalizeSentence(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/’/g, "'")
+    .replace(/[^a-z0-9' ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function handleUserInput(userText) {
+  const sessionId = state.sessionId;
+  try {
+    hideAnswerIdeas();
+    addTranscript('user', userText);
+    state.messages.push({ role: 'user', content: userText });
+    state.turns += 1;
+    $('#turnCount').textContent = state.turns;
+
+    const userWantsToStop = isStopRequest(userText);
+    if (!userWantsToStop) state.learnerSentences.push(userText);
+
+    state.isThinking = true;
+    const tutorTurn = await getTutorTurn();
+
+    // The user may have pressed End while the AI was thinking.
+    if (sessionId !== state.sessionId) return;
+    state.isThinking = false;
+
+    const correction = userWantsToStop ? null : showCorrection(userText, tutorTurn);
+    saveAssistantTurn(tutorTurn);
+
+    // Teach first: read the tip aloud.
+    if (correction && state.settings.speakTips) {
+      await speakTip(correction, sessionId);
+      if (sessionId !== state.sessionId) return;
+    }
+
+    // Repeat-after-me: the learner says the better sentence before the conversation continues.
+    const canPractise = Boolean(correction && correction.better) && state.settings.repeatPractice;
+    if (canPractise) {
+      startRepeatPractice(correction, tutorTurn.reply);
+      return;
+    }
+
+    await continueConversation(tutorTurn.reply, userWantsToStop);
+  } catch (e) {
+    console.error('handleUserInput error:', e);
+    toast('Error: ' + e.message);
+    // Keep the conversation going even after an unexpected error.
+    if (sessionId === state.sessionId) {
+      state.isThinking = false;
+      startListening();
+    }
+  }
+}
+
+// Store the tutor's turn in the same JSON shape we ask the AI to answer in.
+// Seeing its own earlier answers in that shape helps the model keep using it.
+function saveAssistantTurn(tutorTurn) {
+  const content = JSON.stringify({
+    correction: tutorTurn.correction,
+    better: tutorTurn.better,
+    reply: tutorTurn.reply
+  });
+  state.messages.push({ role: 'assistant', content });
+  state.lastAIReply = tutorTurn.reply;
+}
+
+// Show the tutor's tip under the learner's message and remember it for the report.
+// Returns the tip, or null when the learner made no mistake.
+function showCorrection(userText, tutorTurn) {
+  const betterIsDifferent = normalizeSentence(tutorTurn.better) !== normalizeSentence(userText);
+  const better = tutorTurn.better && betterIsDifferent ? tutorTurn.better : '';
+  const why = tutorTurn.correction;
+  if (!better && !why) return null;
+
+  const correction = { said: userText, better, why };
+  state.corrections.push(correction);
+  $('#correctionCount').textContent = state.corrections.length;
+  state.lastTipCard = addCorrectionToTranscript(correction);
+  return correction;
+}
+
+// Read the tip aloud: first the explanation, then the better English sentence,
+// so the learner hears the correct way to say it and can repeat it.
+async function speakTip(correction, sessionId) {
+  const explainInBangla = state.settings.tipLanguage === 'bangla';
+
+  if (correction.why) {
+    // Without a Bangla voice the browser cannot read Bangla text properly,
+    // so in that case the explanation is only shown on screen.
+    const canReadExplanation = !explainInBangla || findBanglaVoice() !== null;
+    if (canReadExplanation) {
+      await speak(correction.why, explainInBangla ? 'bangla' : 'english');
+    }
+  }
+
+  // The user may have pressed End while the explanation was being read.
+  if (sessionId !== state.sessionId) return;
+
+  if (correction.better) {
+    await speak('Try saying: ' + correction.better);
+  }
+}
+
+// The tutor says its in-character reply, then it is the learner's turn again.
+async function continueConversation(reply, userWantsToStop) {
+  const sessionId = state.sessionId;
+  addTranscript('assistant', reply);
+  await speak(reply);
+  if (sessionId !== state.sessionId) return;
+
+  if (userWantsToStop) {
+    endConversation();
+    return;
+  }
+  startListening();
+}
+
+// Decide what the words the learner just said are for:
+// a repeat-after-me attempt, or the next part of the conversation.
+function handleHeardText(text) {
+  if (state.repeatTarget) {
+    finishRepeatPractice(text);
+  } else {
+    handleUserInput(text);
+  }
+}
+
+function getListeningLabel() {
+  return state.repeatTarget ? 'Your turn: say the better sentence' : 'Your turn — speak now';
+}
+
+/* ---------- Repeat-after-me practice ---------- */
+
+// The learner says the better sentence, and the app checks it word by word.
+// The tutor's reply waits until the practice is done or skipped.
+async function startRepeatPractice(correction, reply) {
+  const sessionId = state.sessionId;
+  state.repeatTarget = correction;
+  state.pendingReply = reply;
+
+  // Without spoken tips the learner has not heard the sentence yet, so say it first.
+  if (!state.settings.speakTips) {
+    await speak('Repeat after me: ' + correction.better);
+    if (sessionId !== state.sessionId) return;
+  }
+
+  showRepeatPrompt();
+  startListening();
+}
+
+function showRepeatPrompt() {
+  const card = state.lastTipCard;
+  if (!card) return;
+  const prompt = document.createElement('div');
+  prompt.className = 'flex items-center gap-2 mt-2 text-sm text-amber-200';
+  prompt.textContent = 'Your turn: say the better sentence.';
+  prompt.append(makeLineButton('Skip', skipRepeatPractice));
+  card.append(prompt);
+  state.repeatPromptElement = prompt;
+  const transcript = document.getElementById('transcript');
+  transcript.scrollTop = transcript.scrollHeight;
+}
+
+function skipRepeatPractice() {
+  // While Whisper is still writing down the attempt, let it finish instead.
+  if (!state.repeatTarget || state.isThinking) return;
+  stopListening();
+  finishRepeatPractice(null);
+}
+
+// heardText is null when the learner pressed Skip.
+async function finishRepeatPractice(heardText) {
+  const sessionId = state.sessionId;
+  const correction = state.repeatTarget;
+  const reply = state.pendingReply;
+  state.repeatTarget = null;
+  state.pendingReply = null;
+  if (state.repeatPromptElement) {
+    state.repeatPromptElement.remove();
+    state.repeatPromptElement = null;
+  }
+
+  const wasSkipped = heardText === null;
+  if (!wasSkipped) {
+    const result = compareWords(correction.better, heardText);
+    correction.repeatScore = result.score;   // saved with the session on the Progress page
+    showRepeatResult(result);
+    await speak(getRepeatPraise(result.score));
+    if (sessionId !== state.sessionId) return;
+  }
+
+  await continueConversation(reply, false);
+}
+
+function getRepeatPraise(score) {
+  if (score >= 90) return 'Perfect!';
+  if (score >= 60) return 'Good, almost there.';
+  return 'Nice try. Keep practising.';
+}
+
+// Compare the sentence the learner should say with what was heard, word by word.
+// It looks for the longest list of words that appear in the same order in both
+// (the "longest common subsequence"), so one missed word does not make every later word count as wrong.
+function compareWords(expectedText, heardText) {
+  const expectedWords = normalizeSentence(expectedText).split(' ').filter(Boolean);
+  const heardWords = normalizeSentence(heardText).split(' ').filter(Boolean);
+
+  // matchTable[i][j] = how many words match when comparing expectedWords from i and heardWords from j onwards.
+  const matchTable = [];
+  for (let i = expectedWords.length; i >= 0; i--) {
+    matchTable[i] = [];
+    for (let j = heardWords.length; j >= 0; j--) {
+      if (i === expectedWords.length || j === heardWords.length) {
+        matchTable[i][j] = 0;
+      } else if (expectedWords[i] === heardWords[j]) {
+        matchTable[i][j] = matchTable[i + 1][j + 1] + 1;
+      } else {
+        matchTable[i][j] = Math.max(matchTable[i + 1][j], matchTable[i][j + 1]);
+      }
+    }
+  }
+
+  // Walk through the table and mark each expected word as said or missed.
+  const words = [];
+  let i = 0;
+  let j = 0;
+  while (i < expectedWords.length) {
+    const heardWordLeft = j < heardWords.length;
+    if (heardWordLeft && expectedWords[i] === heardWords[j]) {
+      words.push({ text: expectedWords[i], said: true });
+      i += 1;
+      j += 1;
+    } else if (heardWordLeft && matchTable[i][j + 1] >= matchTable[i + 1][j]) {
+      j += 1;   // an extra word the learner said; skip it
+    } else {
+      words.push({ text: expectedWords[i], said: false });
+      i += 1;
+    }
+  }
+
+  const saidCount = words.filter(word => word.said).length;
+  const score = expectedWords.length ? Math.round((saidCount / expectedWords.length) * 100) : 0;
+  return { words, score };
+}
+
+// Show each word of the better sentence in green (heard) or red (missed), plus a score.
+function showRepeatResult(result) {
+  const card = state.lastTipCard;
+  if (!card) return;
+  const wordsHtml = result.words.map(word => {
+    const colourClass = word.said ? 'text-emerald-300' : 'text-rose-300 underline';
+    return `<span class="${colourClass}">${escapeHtml(word.text)}</span>`;
+  }).join(' ');
+  const resultLine = document.createElement('div');
+  resultLine.className = 'mt-2 text-sm';
+  resultLine.innerHTML = `<span class="text-[color:var(--muted)]">You repeated:</span> ${wordsHtml} <span class="font-semibold">${result.score}%</span>`;
+  card.append(resultLine);
+  const transcript = document.getElementById('transcript');
+  transcript.scrollTop = transcript.scrollHeight;
+}
+
+/* ---------- Help while talking ---------- */
+
+// Under each AI message: hear it again slowly, or see it in Bangla.
+function addLineActions(row, text) {
+  const messageColumn = row.lastElementChild;
+  const translation = document.createElement('div');
+  translation.lang = 'bn';
+  translation.className = 'text-sm text-[color:var(--muted)] mt-1';
+
+  const actions = document.createElement('div');
+  actions.className = 'flex gap-2 mt-1';
+  actions.append(
+    makeLineButton('🐢 Slowly', () => replayText(text, 0.75)),
+    makeLineButton('বাংলা', () => showBanglaTranslation(text, translation))
+  );
+  messageColumn.append(actions, translation);
+}
+
+function makeLineButton(label, onClick) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'line-action';
+  button.textContent = label;
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+// Hear a sentence again (slowly when speedFactor is below 1).
+// The mic is paused meanwhile, so it does not hear the AI; then listening continues.
+async function replayText(text, speedFactor) {
+  const isBusy = state.isAISpeaking || state.isThinking;
+  if (state.screen !== 'convo' || isBusy) return;
+  const sessionId = state.sessionId;
+  stopListening();
+  await speak(text, 'english', speedFactor);
+  if (sessionId !== state.sessionId) return;
+  startListening();
+}
+
+async function showBanglaTranslation(text, translationElement) {
+  // A second tap hides the translation again.
+  if (translationElement.textContent) {
+    translationElement.classList.toggle('hidden');
+    return;
+  }
+  if (state.settings.provider === 'demo') {
+    toast('Translation needs an AI provider (not Demo mode).');
+    return;
+  }
+
+  translationElement.textContent = 'অনুবাদ হচ্ছে…';
+  try {
+    const prompt = `Translate this English sentence into simple, natural Bangla (Bengali script, as spoken in Bangladesh). Answer with the translation only.\n\n${text}`;
+    const rawText = await requestChatCompletion([{ role: 'user', content: prompt }]);
+    translationElement.textContent = cleanText(removeThinking(rawText));
+  } catch (error) {
+    translationElement.textContent = '';
+    toast('Could not translate: ' + error.message);
+  }
+}
+
+// "Help me answer": ask the AI for a few things the learner could say next.
+async function showAnswerIdeas() {
+  const canHelp = state.screen === 'convo' && !state.isAISpeaking && !state.isThinking && !state.repeatTarget;
+  if (!canHelp) return;
+
+  if (state.settings.provider === 'demo') {
+    const phraseIdeas = state.scenario.phrases.map(phrase => ({ english: phrase, meaning: '' }));
+    renderAnswerIdeas(phraseIdeas);
+    return;
+  }
+
+  const sessionId = state.sessionId;
+  stopListening();
+  state.isThinking = true;
+  setPhase('processing', 'Finding ideas for your answer…');
+  try {
+    const ideas = await requestAnswerIdeas();
+    if (sessionId !== state.sessionId) return;
+    renderAnswerIdeas(ideas);
+  } catch (error) {
+    console.error('Answer ideas failed:', error);
+    if (sessionId === state.sessionId) toast('Could not get ideas: ' + error.message);
+  }
+
+  if (sessionId !== state.sessionId) return;
+  state.isThinking = false;
+  startListening();
+}
+
+async function requestAnswerIdeas() {
+  const wantsBangla = state.settings.tipLanguage === 'bangla';
+  const meaningRule = wantsBangla
+    ? '"meaning" is the meaning in simple Bangla (Bengali script).'
+    : 'Leave "meaning" empty.';
+  const prompt = `You help an English learner who is stuck in a spoken role-play called "${state.scenario.title}".
+${LEVELS[state.settings.level] || LEVELS.intermediate}
+
+The conversation so far (most recent last):
+${buildRecentChatText(6)}
+
+Suggest 3 different, short, natural things the learner could say next.
+Answer ONLY with JSON in exactly this shape, with no other text:
+{"ideas": [{"english": "", "meaning": ""}]}
+${meaningRule}`;
+
+  const rawText = await requestChatCompletion([{ role: 'user', content: prompt }]);
+  const parsed = parseJsonObject(removeThinking(rawText));
+  const ideas = parsed && Array.isArray(parsed.ideas) ? parsed.ideas : [];
+  const usableIdeas = ideas
+    .map(idea => ({ english: cleanText(idea.english), meaning: cleanText(idea.meaning) }))
+    .filter(idea => idea.english);
+  if (!usableIdeas.length) throw new Error('The AI sent no ideas.');
+  return usableIdeas.slice(0, 3);
+}
+
+// The last few messages as plain text, for example "Partner: Hi!" and "Learner: A latte, please."
+function buildRecentChatText(messageCount) {
+  const chatMessages = state.messages.slice(1).slice(-messageCount);
+  return chatMessages.map(message => {
+    if (message.role === 'user') return 'Learner: ' + message.content;
+    const savedTurn = parseJsonObject(message.content);
+    const reply = savedTurn ? savedTurn.reply : message.content;
+    return 'Partner: ' + reply;
+  }).join('\n');
+}
+
+function renderAnswerIdeas(ideas) {
+  const box = $('#hintBox');
+  box.innerHTML = '<div class="text-xs font-semibold text-amber-200 mb-2">You could say:</div>';
+  ideas.forEach(idea => {
+    const row = document.createElement('div');
+    row.className = 'flex items-start justify-between gap-3 py-1.5 border-t border-white/5';
+    const meaningHtml = idea.meaning
+      ? `<div lang="bn" class="text-xs text-[color:var(--muted)] mt-0.5">${escapeHtml(idea.meaning)}</div>`
+      : '';
+    const texts = document.createElement('div');
+    texts.innerHTML = `<div>${escapeHtml(idea.english)}</div>${meaningHtml}`;
+    row.append(texts, makeLineButton('🔊 Listen', () => replayText(idea.english, 1)));
+    box.append(row);
+  });
+  box.classList.remove('hidden');
+}
+
+function hideAnswerIdeas() {
+  const box = $('#hintBox');
+  box.classList.add('hidden');
+  box.innerHTML = '';
+}
+
+/* ---------- Talking to the AI ---------- */
+
+// Ask the AI for the tutor's next turn.
+// Free AI services sometimes fail for a moment, so try twice.
+// If it still fails, use an offline reply so the conversation does not stop.
+async function getTutorTurn() {
+  setPhase('processing', 'Thinking…');
+
+  if (state.settings.provider === 'demo') {
+    return { correction: '', better: '', reply: demoReply() };
+  }
+
+  let lastError = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const rawText = await requestChatCompletion(buildRequestMessages());
+      const tutorTurn = parseTutorReply(rawText);
+      if (tutorTurn.reply) return tutorTurn;
+      throw createAIError('The AI sent an empty reply.', true);
+    } catch (error) {
+      console.error(`AI error (attempt ${attempt}):`, error);
+      lastError = error;
+      const canTryAgain = attempt === 1 && error.canRetry;
+      if (!canTryAgain) break;
+      await wait(error.retryAfterMs || 1500);
+    }
+  }
+
+  toast(lastError.message + ' Using an offline reply for now.');
+  return { correction: '', better: '', reply: demoReply() };
+}
+
+// Groq, OpenRouter, Qwen and OpenAI all use the same "chat completions" format,
+// so one function can talk to all of them.
+async function requestChatCompletion(messages) {
+  const prov = PROVIDERS[state.settings.provider];
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + getApiKey()
+  };
+  if (state.settings.provider === 'openrouter') {
+    headers['HTTP-Referer'] = window.location.origin;
+    headers['X-Title'] = 'Voxly';
+  }
+
+  const requestBody = {
+    model: state.settings.model,
+    messages,
+    temperature: 0.7
+  };
+  // Groq's GPT-OSS models "think" before they answer. Low effort keeps replies quick
+  // and uses less of the free per-minute token limit.
+  const isGroqGptOss = state.settings.provider === 'groq' && state.settings.model.includes('gpt-oss');
+  if (isGroqGptOss) requestBody.reasoning_effort = 'low';
+
+  let response;
+  try {
+    response = await fetch(prov.chatUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody)
+    });
+  } catch (networkError) {
+    throw createAIError(`Could not reach ${prov.name}. Check your internet connection.`, true);
+  }
+
+  if (!response.ok) {
+    throw await createAIErrorFromResponse(prov.name, response);
+  }
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || '';
+}
+
+async function createAIErrorFromResponse(providerName, response) {
+  const errorText = await response.text();
+  let detail = errorText.slice(0, 300);
+  try {
+    const parsed = JSON.parse(errorText);
+    detail = parsed?.error?.message || parsed?.message || detail;
+  } catch (_) {
+    // The error body was not JSON. Keep the plain text.
+  }
+
+  if (response.status === 401) {
+    return createAIError(`${providerName} API key is invalid. Check the key in Settings.`, false);
+  }
+  if (response.status === 402) {
+    return createAIError(`${providerName} has no credit for this model. Pick a free model in Settings.`, false);
+  }
+  if (response.status === 429) {
+    // The service may say how long to wait. Wait at most 10 seconds, then try once more.
+    // A used-up daily limit will still fail after that.
+    const retryAfterSeconds = Number(response.headers.get('retry-after')) || 3;
+    const waitMs = Math.min(retryAfterSeconds, 10) * 1000;
+    return createAIError(`${providerName} rate limit reached (free plans have per-minute and daily limits).`, true, waitMs);
+  }
+  const isServerProblem = response.status >= 500;
+  return createAIError(`${providerName} error ${response.status}: ${detail}`, isServerProblem);
+}
+
+function createAIError(message, canRetry, retryAfterMs = 1500) {
+  const error = new Error(message);
+  error.canRetry = canRetry;
+  error.retryAfterMs = retryAfterMs;
+  return error;
+}
+
+// Send the tutor instructions plus only the most recent part of the chat.
+function buildRequestMessages() {
+  const instructionsMessage = state.messages[0];
+  let recentMessages = state.messages.slice(1).slice(-MAX_RECENT_MESSAGES);
+
+  // The instructions are a user message, and many models need user and AI turns to alternate.
+  // So the recent part must start with an AI turn.
+  const startsWithUser = recentMessages.length > 0 && recentMessages[0].role === 'user';
+  if (startsWithUser) recentMessages = recentMessages.slice(1);
+
+  return [instructionsMessage].concat(recentMessages);
+}
+
+// The tutor answers in JSON: {"correction", "better", "reply"}.
+// Free models sometimes ignore that format, so fall back to using the text as the reply.
+function parseTutorReply(rawText) {
+  const text = removeThinking(rawText);
+  const parsed = parseJsonObject(text);
+  if (parsed && parsed.reply) {
+    return {
+      correction: cleanText(parsed.correction),
+      better: cleanText(parsed.better),
+      reply: cleanText(parsed.reply)
+    };
+  }
+
+  // Broken JSON: try to rescue just the reply, so the voice never reads out brackets.
+  const replyMatch = text.match(/"reply"\s*:\s*"([^"]*)"/);
+  if (replyMatch) {
+    return { correction: '', better: '', reply: cleanText(replyMatch[1]) };
+  }
+  return { correction: '', better: '', reply: cleanText(text) };
+}
+
+// Find the {...} part of a model's answer and read it as JSON. Returns null when that fails.
+function parseJsonObject(text) {
+  const jsonStart = text.indexOf('{');
+  const jsonEnd = text.lastIndexOf('}');
+  const hasJson = jsonStart !== -1 && jsonEnd > jsonStart;
+  if (!hasJson) return null;
+  try {
+    return JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+  } catch (_) {
+    return null;
+  }
+}
+
+// Some models write their hidden reasoning inside <think> tags before the real answer.
+function removeThinking(text) {
+  return String(text || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+}
+
+// Remove markdown symbols like ** and # that the voice would otherwise read out loud.
+function cleanText(value) {
+  return String(value || '')
+    .replace(/[*_#`~]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function demoReply() {
+  const lastMessage = state.messages[state.messages.length - 1];
+  const text = String(lastMessage?.content || '').toLowerCase();
+  const scenario = state.scenario?.id;
+  const replies = {
+    restaurant: [
+      'That sounds good. Would you like something to drink with your meal?',
+      'Sure. Would you like to hear today\'s specials?',
+      'Great choice. Is there anything else I can get for you?'
+    ],
+    coworker: [
+      'Nice! What have you been working on this week?',
+      'That sounds interesting. How is everything going?',
+      'Good to hear. Do you have any plans after work?'
+    ],
+    shopping: [
+      'Sure. What size are you looking for?',
+      'Absolutely. Would you like to try it on?',
+      'We have a few options. What color do you prefer?'
+    ],
+    meeting: [
+      'Nice to meet you! What do you do?',
+      'That is interesting. How long have you known the host?',
+      'Sounds great. Have you been to one of these gatherings before?'
+    ],
+    airport: [
+      'Thank you. Do you have any bags to check in?',
+      'Your flight is on time. Would you prefer a window or aisle seat?',
+      'Your gate is nearby. Do you need any other help?'
+    ],
+    weekend: [
+      'That sounds fun. What time should we meet?',
+      'I like that idea. Would Saturday afternoon work for you?',
+      'Great! What would you like to do first?'
+    ],
+    coffee: [
+      'Sure. What size would you like?',
+      'No problem. Would you like anything to eat?',
+      'Great. Will that be for here or to go?'
+    ],
+    taxi: [
+      'Sure. It should take about twenty minutes. Is there a particular route you prefer?',
+      'No problem. Are you in a hurry today?',
+      'We are almost there. Would you like me to drop you at the main entrance?'
+    ],
+    freetalk: [
+      'That sounds nice. What do you usually do in your free time?',
+      'Interesting! Can you tell me a bit more about that?',
+      'I see. What are you looking forward to this week?'
+    ]
+  };
+  const list = replies[scenario] || ['That sounds good. Tell me a little more.'];
+  let reply = list[state.turns % list.length];
+  if (text.includes('thank')) reply = 'You\'re welcome! Is there anything else you\'d like to talk about?';
+  return reply;
+}
+
+/* ---------- Ending and the report ---------- */
+
+function startElapsedTimer() {
+  clearInterval(state.elapsedTimer);
+  state.elapsedTimer = setInterval(() => {
+    if (!state.startedAt) return;
+    const seconds = Math.max(0, Math.floor((Date.now() - state.startedAt) / 1000));
+    const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+    const ss = String(seconds % 60).padStart(2, '0');
+    $('#elapsed').textContent = `${mm}:${ss}`;
+  }, 250);
+}
+
+// "Finish": end the conversation and show the report.
+function endConversation() {
+  stopConversation();
+  setPhase('waiting', 'Session complete');
+  showScreen('feedback');
+  if (window.lucide) lucide.createIcons();
+  showFeedback();
+}
+
+// "Exit": leave the conversation straight away, without a report.
+// If the learner has already spoken, ask first, so a misclick does not throw the practice away.
+function exitConversation() {
+  const learnerSpoke = state.learnerSentences.length > 0;
+  if (learnerSpoke) {
+    const confirmed = window.confirm('Leave this conversation? You will not get a report for it.');
+    if (!confirmed) return;
+  }
+  stopConversation();
+  goHome();
+}
+
+// Stop everything that belongs to the running conversation: speech, microphone and timer.
+function stopConversation() {
+  // A new session id makes any AI reply or speech that is still on its way get ignored.
+  state.sessionId += 1;
+  state.isThinking = false;
+  state.repeatTarget = null;
+  state.pendingReply = null;
+  state.skipSpeechRequested = false;
+  stopListening();
+  closeMicrophone();
+  clearLiveTranscript();
+  stopAllSpeech();
+  state.isAISpeaking = false;
+  $('#waveWrap').style.display = 'none';
+  clearInterval(state.elapsedTimer);
+  state.elapsedTimer = null;
+  $('#micWrap').classList.remove('listening');
+}
+
+// Show a quick report straight away in demo mode. Otherwise ask the AI tutor for a real report,
+// and fall back to the quick report if the AI does not answer.
+async function showFeedback() {
+  const sessionId = state.sessionId;
+  const learnerSentences = state.learnerSentences.slice();
+  const sessionRecord = buildSessionRecord();
+  const quickReport = buildQuickReport(learnerSentences);
+  renderCorrectionList();
+
+  const canAskAI = learnerSentences.length > 0 && state.settings.provider !== 'demo';
+  if (!canAskAI) {
+    renderReport(quickReport);
+    saveSessionToHistory(sessionRecord, quickReport);
+    return;
+  }
+
+  showReportLoading();
+  let finalReport = quickReport;
+  try {
+    const aiReport = await requestAIReport(learnerSentences);
+    finalReport = mergeReports(aiReport, quickReport);
+  } catch (error) {
+    console.error('AI report failed:', error);
+    if (sessionId === state.sessionId) toast('Could not get the AI report, so this is a quick offline report.');
+  }
+
+  // Save the session even if the learner has already moved on to a new one.
+  saveSessionToHistory(sessionRecord, finalReport);
+  if (sessionId !== state.sessionId) return;
+  renderReport(finalReport);
+}
+
+async function requestAIReport(learnerSentences) {
+  const explanationLanguage = getExplanationLanguageName();
+  const phraseMeaningRule = state.settings.tipLanguage === 'bangla'
+    ? ' Write each phrase in English, followed by its Bangla meaning in brackets.'
+    : '';
+  const reportInstructions = `You are an English tutor. Below is everything a learner said during a spoken role-play called "${state.scenario.title}". The text comes from speech recognition, so ignore punctuation and capital letters.
+${LEVELS[state.settings.level] || LEVELS.intermediate}
+
+Answer ONLY with JSON in exactly this shape, with no other text:
+{"grammar": 0, "vocabulary": 0, "fluency": 0, "grammarNote": "", "vocabularyNote": "", "fluencyNote": "", "summary": "", "phrasesToLearn": ["", "", ""]}
+
+- Scores are whole numbers from 0 to 100.
+- Each note is one short, encouraging sentence with one concrete tip, written in ${explanationLanguage}.
+- "summary" is 2 or 3 sentences about how the learner did overall, written in ${explanationLanguage}.
+- "phrasesToLearn" lists 3 useful English phrases for this situation that the learner did not use.${phraseMeaningRule}
+
+What the learner said:
+${learnerSentences.map((sentence, index) => `${index + 1}. ${sentence}`).join('\n')}`;
+
+  const rawText = await requestChatCompletion([{ role: 'user', content: reportInstructions }]);
+  const report = parseJsonObject(removeThinking(rawText));
+  if (!report) throw new Error('The AI report was not valid JSON.');
+  return report;
+}
+
+// Use the AI's scores and notes, but keep pronunciation from the speech measurement.
+// Anything the AI left out or got wrong falls back to the quick report.
+function mergeReports(aiReport, quickReport) {
+  const aiPhrases = Array.isArray(aiReport.phrasesToLearn)
+    ? aiReport.phrasesToLearn.map(cleanText).filter(Boolean)
+    : [];
+  return {
+    scores: {
+      pronunciation: quickReport.scores.pronunciation,
+      grammar: toScore(aiReport.grammar, quickReport.scores.grammar),
+      vocabulary: toScore(aiReport.vocabulary, quickReport.scores.vocabulary),
+      fluency: toScore(aiReport.fluency, quickReport.scores.fluency)
+    },
+    notes: {
+      pronunciation: quickReport.notes.pronunciation,
+      grammar: cleanText(aiReport.grammarNote) || quickReport.notes.grammar,
+      vocabulary: cleanText(aiReport.vocabularyNote) || quickReport.notes.vocabulary,
+      fluency: cleanText(aiReport.fluencyNote) || quickReport.notes.fluency
+    },
+    summary: cleanText(aiReport.summary) || quickReport.summary,
+    phrasesToLearn: aiPhrases.length ? aiPhrases : quickReport.phrasesToLearn
+  };
+}
+
+function toScore(value, fallbackScore) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallbackScore;
+  return clampScore(number);
+}
+
+// A simple offline report based on word counts and the tutor's corrections.
+// Used in demo mode, or when the AI report fails.
+function buildQuickReport(learnerSentences) {
+  const words = learnerSentences.flatMap(sentence => sentence.trim().split(/\s+/).filter(Boolean));
+  const text = learnerSentences.join(' ');
+  const wordCount = words.length;
+  const turns = learnerSentences.length;
+  const avgWords = turns ? wordCount / turns : 0;
+  const uniqueRatio = wordCount ? new Set(words.map(w => w.toLowerCase().replace(/[^a-z']/g, ''))).size / wordCount : 0;
+  const fillers = (text.match(/\b(um|uh|like|you know|actually|basically)\b/gi) || []).length;
+  const shareOfTurnsWithCorrections = turns ? Math.min(1, state.corrections.length / turns) : 0;
+
+  const clarity = getAverageSpeechConfidence();
+  const pronunciation = clarity === null
+    ? clampScore(70 + Math.min(20, turns * 2) + Math.min(8, wordCount / 20))
+    : clampScore(clarity * 100);
+  const grammar = clampScore(95 - shareOfTurnsWithCorrections * 45);
+  const vocabulary = clampScore(62 + Math.min(25, uniqueRatio * 50) + Math.min(8, turns));
+  const fluency = clampScore(65 + Math.min(25, avgWords * 2) - Math.min(15, fillers * 3));
+  const overall = Math.round((pronunciation + grammar + vocabulary + fluency) / 4);
+
+  let summary;
+  if (!turns) {
+    summary = 'You ended the session before giving a spoken answer. Start another conversation and try at least a few turns.';
+  } else {
+    summary = `You completed ${turns} spoken turn${turns === 1 ? '' : 's'} with about ${wordCount} word${wordCount === 1 ? '' : 's'}. Overall practice score: ${overall}/100. ${overall >= 80 ? 'Nice work — keep using short, natural answers and build on this consistency.' : 'Good start — keep practicing short daily conversations and gradually make your answers longer.'}`;
+  }
+
+  return {
+    scores: { pronunciation, grammar, vocabulary, fluency },
+    notes: {
+      pronunciation: pronunciation >= 80 ? 'Your speech was clear enough for a natural conversation.' : 'Keep speaking out loud regularly; clarity improves with repetition.',
+      grammar: grammar >= 80 ? 'Your sentence structure was generally solid.' : 'Focus on simple sentence patterns and verb forms.',
+      vocabulary: vocabulary >= 80 ? 'You used a useful range of everyday words.' : 'Try adding a few new everyday expressions to each practice session.',
+      fluency: fluency >= 80 ? 'You kept the conversation moving naturally.' : 'Try answering in complete thoughts instead of very short replies.'
+    },
+    summary,
+    phrasesToLearn: state.scenario ? state.scenario.phrases : []
+  };
+}
+
+// The browser reports how sure it was about each sentence it heard (0 to 1).
+// The average is used as a simple pronunciation score. Returns null if the browser gave no values.
+function getAverageSpeechConfidence() {
+  const values = state.speechConfidences;
+  if (!values.length) return null;
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return total / values.length;
+}
+
+function showReportLoading() {
+  ['Pron', 'Gram', 'Vocab', 'Flu'].forEach(name => {
+    $(`#score${name}`).textContent = '…';
+    $(`#bar${name}`).style.width = '0%';
+    $(`#note${name}`).textContent = '';
+  });
+  $('#overallSummary').textContent = 'Your tutor is writing your report…';
+  $('#learnList').innerHTML = '';
+}
+
+function renderReport(report) {
+  setScore('Pron', report.scores.pronunciation);
+  setScore('Gram', report.scores.grammar);
+  setScore('Vocab', report.scores.vocabulary);
+  setScore('Flu', report.scores.fluency);
+  $('#notePron').textContent = report.notes.pronunciation;
+  $('#noteGram').textContent = report.notes.grammar;
+  $('#noteVocab').textContent = report.notes.vocabulary;
+  $('#noteFlu').textContent = report.notes.fluency;
+  $('#overallSummary').textContent = report.summary;
+  $('#learnList').innerHTML = report.phrasesToLearn.map(phrase =>
+    `<li class="flex gap-2 items-start"><span class="text-violet-400">•</span><span>${escapeHtml(phrase)}</span></li>`
+  ).join('');
+}
+
+function renderCorrectionList() {
+  const list = $('#correctionList');
+  if (!state.corrections.length) {
+    list.innerHTML = '<li class="text-[color:var(--muted)]">No corrections this time. Well done!</li>';
+    return;
+  }
+  list.innerHTML = state.corrections.map(correction => {
+    const betterLine = correction.better
+      ? `<div class="text-emerald-300">Better: ${escapeHtml(correction.better)}</div>`
+      : '';
+    const whyLine = correction.why
+      ? `<div lang="${getExplanationLangCode()}" class="text-sm text-[color:var(--muted)] mt-1">${escapeHtml(correction.why)}</div>`
+      : '';
+    return `<li class="border-b border-white/5 pb-3"><div class="text-[color:var(--muted)]">You said: ${escapeHtml(correction.said)}</div>${betterLine}${whyLine}</li>`;
+  }).join('');
+}
+
+/* ---------- Progress: saved sessions, mistakes notebook, review ---------- */
+
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+    const sessions = raw ? JSON.parse(raw) : [];
+    return Array.isArray(sessions) ? sessions : [];
+  } catch (e) {
+    console.warn('Saved progress could not be read.', e);
+    return [];
+  }
+}
+
+function saveHistory(sessions) {
+  try {
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(sessions.slice(-MAX_SAVED_SESSIONS)));
+  } catch (e) {
+    console.warn('Progress could not be saved.', e);
+    toast('Could not save your progress in this browser.');
+  }
+}
+
+// A copy of the finished session, taken straight away so a new session cannot change it.
+function buildSessionRecord() {
+  const startedAt = state.startedAt || Date.now();
+  return {
+    date: new Date().toISOString(),
+    scenario: state.scenario ? state.scenario.title : '',
+    turns: state.learnerSentences.length,
+    minutes: Math.max(1, Math.round((Date.now() - startedAt) / 60000)),
+    corrections: state.corrections.map(correction => ({
+      said: correction.said,
+      better: correction.better,
+      why: correction.why,
+      repeatScore: typeof correction.repeatScore === 'number' ? correction.repeatScore : null
+    }))
+  };
+}
+
+function saveSessionToHistory(sessionRecord, report) {
+  const learnerSpoke = sessionRecord.turns > 0;
+  if (!learnerSpoke) return;
+  const sessions = loadHistory();
+  sessions.push({ ...sessionRecord, scores: report.scores });
+  saveHistory(sessions);
+}
+
+// YYYY-MM-DD in the computer's own time zone.
+function toLocalDay(date) {
+  return date.toLocaleDateString('en-CA');
+}
+
+// How many days in a row have at least one session, counting back from today
+// (or from yesterday, when there is no session yet today).
+function countStreakDays(sessions) {
+  const practiceDays = new Set(sessions.map(session => toLocalDay(new Date(session.date))));
+  const day = new Date();
+  const practisedToday = practiceDays.has(toLocalDay(day));
+  if (!practisedToday) day.setDate(day.getDate() - 1);
+
+  let streak = 0;
+  while (practiceDays.has(toLocalDay(day))) {
+    streak += 1;
+    day.setDate(day.getDate() - 1);
+  }
+  return streak;
+}
+
+// Every saved correction, newest first.
+function getAllSavedCorrections() {
+  const corrections = [];
+  loadHistory().forEach(session => {
+    (session.corrections || []).forEach(correction => {
+      corrections.push({ ...correction, date: session.date, scenario: session.scenario });
+    });
+  });
+  return corrections.reverse();
+}
+
+function showProgress() {
+  if (state.screen === 'convo') {
+    toast('Finish the conversation first (press End).');
+    return;
+  }
+  closeReview();
+  renderProgress();
+  showScreen('progress');
+  if (window.lucide) lucide.createIcons();
+}
+
+function renderProgress() {
+  const sessions = loadHistory();
+  const totalMinutes = sessions.reduce((sum, session) => sum + (Number(session.minutes) || 0), 0);
+  $('#statStreak').textContent = countStreakDays(sessions);
+  $('#statSessions').textContent = sessions.length;
+  $('#statMinutes').textContent = totalMinutes;
+
+  const recentSessions = sessions.slice(-10).reverse();
+  if (recentSessions.length) {
+    $('#sessionList').innerHTML = recentSessions.map(renderSessionRow).join('');
+  } else {
+    $('#sessionList').innerHTML = '<li class="text-[color:var(--muted)]">No sessions yet. Finish a conversation to see it here.</li>';
+  }
+
+  const corrections = getAllSavedCorrections();
+  $('#notebookCount').textContent = corrections.length;
+  if (corrections.length) {
+    $('#notebookList').innerHTML = corrections.slice(0, 100).map(renderNotebookRow).join('');
+  } else {
+    $('#notebookList').innerHTML = '<li class="text-[color:var(--muted)]">No corrections saved yet.</li>';
+  }
+
+  const hasCardsToReview = corrections.some(correction => correction.better);
+  $('#reviewBtn').disabled = !hasCardsToReview;
+}
+
+function renderSessionRow(session) {
+  const date = new Date(session.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+  const scores = session.scores || {};
+  const scoreValues = [scores.pronunciation, scores.grammar, scores.vocabulary, scores.fluency].filter(Number.isFinite);
+  let averageText = '—';
+  if (scoreValues.length) {
+    const total = scoreValues.reduce((sum, value) => sum + value, 0);
+    averageText = Math.round(total / scoreValues.length) + '/100';
+  }
+  const details = `${escapeHtml(date)} · ${Number(session.turns) || 0} turns · ${Number(session.minutes) || 0} min`;
+  return `<li class="flex items-center justify-between gap-3 border-b border-white/5 pb-2">
+    <div><div>${escapeHtml(session.scenario || 'Conversation')}</div><div class="text-xs text-[color:var(--muted)]">${details}</div></div>
+    <div class="font-semibold whitespace-nowrap">${averageText}</div>
+  </li>`;
+}
+
+function renderNotebookRow(correction) {
+  const betterLine = correction.better
+    ? `<div class="text-emerald-300">Better: ${escapeHtml(correction.better)}</div>`
+    : '';
+  const whyLine = correction.why
+    ? `<div lang="${getExplanationLangCode()}" class="text-sm text-[color:var(--muted)] mt-1">${escapeHtml(correction.why)}</div>`
+    : '';
+  const repeatLine = typeof correction.repeatScore === 'number'
+    ? `<div class="text-xs text-[color:var(--muted)] mt-1">Repeat-after-me: ${correction.repeatScore}%</div>`
+    : '';
+  return `<li class="border-b border-white/5 pb-3"><div class="text-[color:var(--muted)]">You said: ${escapeHtml(correction.said)}</div>${betterLine}${whyLine}${repeatLine}</li>`;
+}
+
+// Review: up to 5 random past corrections as flash cards.
+// The learner says a better version out loud, then checks the answer.
+function startReview() {
+  const corrections = getAllSavedCorrections().filter(correction => correction.better);
+  if (!corrections.length) {
+    toast('No corrections to review yet.');
+    return;
+  }
+  state.review = { cards: shuffle(corrections).slice(0, REVIEW_CARD_COUNT), index: 0 };
+  $('#reviewPanel').classList.remove('hidden');
+  renderReviewCard();
+}
+
+// A shuffled copy of the list (the Fisher–Yates method: swap each item with a random earlier one).
+function shuffle(list) {
+  const copy = list.slice();
+  for (let i = copy.length - 1; i > 0; i--) {
+    const randomIndex = Math.floor(Math.random() * (i + 1));
+    const temporary = copy[i];
+    copy[i] = copy[randomIndex];
+    copy[randomIndex] = temporary;
+  }
+  return copy;
+}
+
+function renderReviewCard() {
+  const cards = state.review.cards;
+  const index = state.review.index;
+  const card = cards[index];
+  $('#reviewCounter').textContent = `Card ${index + 1} of ${cards.length}`;
+  $('#reviewSaid').textContent = card.said;
+  $('#reviewBetter').textContent = card.better;
+  $('#reviewWhy').textContent = card.why || '';
+  $('#reviewWhy').lang = getExplanationLangCode();
+  $('#reviewAnswer').classList.add('hidden');
+  $('#reviewShowBtn').classList.remove('hidden');
+  const isLastCard = index === cards.length - 1;
+  $('#reviewNextBtn').textContent = isLastCard ? 'Finish' : 'Next card';
+}
+
+function revealReviewAnswer() {
+  $('#reviewAnswer').classList.remove('hidden');
+  $('#reviewShowBtn').classList.add('hidden');
+}
+
+function listenToReviewAnswer() {
+  const card = state.review.cards[state.review.index];
+  if (card) speak(card.better);
+}
+
+function nextReviewCard() {
+  const isLastCard = state.review.index >= state.review.cards.length - 1;
+  if (isLastCard) {
+    closeReview();
+    toast('Review finished. Well done!');
+    return;
+  }
+  state.review.index += 1;
+  renderReviewCard();
+}
+
+function closeReview() {
+  $('#reviewPanel').classList.add('hidden');
+  stopAllSpeech();
+}
+
+function clearHistory() {
+  const confirmed = window.confirm('Delete all saved sessions and corrections? This cannot be undone.');
+  if (!confirmed) return;
+  saveHistory([]);
+  renderProgress();
+  toast('Progress cleared.');
+}
+
+function clampScore(value) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function setScore(name, value) {
+  $(`#score${name}`).textContent = value + '/100';
+  $(`#bar${name}`).style.width = value + '%';
+}
+
+function resetConversationUI() {
+  stopListening();
+  clearInterval(state.elapsedTimer);
+  state.elapsedTimer = null;
+  state.messages = [];
+  state.turns = 0;
+  state.startedAt = null;
+  $('#elapsed').textContent = '00:00';
+  $('#turnCount').textContent = '0';
+  $('#correctionCount').textContent = '0';
+  $('#transcript').innerHTML = '';
+  clearLiveTranscript();
+}
+
+function goHome() {
+  resetConversationUI();
+  closeMicrophone();
+  stopAllSpeech();
+  showScreen('landing');
+  setPhase('waiting', 'Ready');
+}
+
+function testVoice() {
+  speak('Hello! This is your Voxly practice voice.');
+}
+
+function init() {
+  loadSettings();
+  loadOpenRouterModels();
+  loadGroqModels();
+  populateVoices();
+  showFileWarningIfNeeded();
+  if (window.lucide) lucide.createIcons();
+
+  $('#settingsBtn').addEventListener('click', openSettings);
+  $('#closeSettings').addEventListener('click', closeSettings);
+  $('#settingsBackdrop').addEventListener('click', closeSettings);
+  $('#saveSettings').addEventListener('click', saveSettings);
+  $('#stopBtn').addEventListener('click', endConversation);
+  $('#exitBtn').addEventListener('click', exitConversation);
+  $('#micWrap').addEventListener('click', onMicTapped);
+  $('#againBtn').addEventListener('click', () => {
+    resetConversationUI();
+    startConversation();
+  });
+  $('#homeBtn').addEventListener('click', goHome);
+  $('#clearTranscript').addEventListener('click', () => {
+    $('#transcript').innerHTML = '';
+  });
+  $('#voiceSelect').addEventListener('change', e => {
+    state.settings.voiceURI = e.target.value;
+  });
+  $('#tipLanguage').addEventListener('change', updateTipVoiceHelp);
+  $('#helpBtn').addEventListener('click', showAnswerIdeas);
+  $('#progressBtn').addEventListener('click', showProgress);
+  $('#progressBackBtn').addEventListener('click', goHome);
+  $('#reviewBtn').addEventListener('click', startReview);
+  $('#reviewShowBtn').addEventListener('click', revealReviewAnswer);
+  $('#reviewListenBtn').addEventListener('click', listenToReviewAnswer);
+  $('#reviewNextBtn').addEventListener('click', nextReviewCard);
+  $('#reviewCloseBtn').addEventListener('click', closeReview);
+  $('#clearHistoryBtn').addEventListener('click', clearHistory);
+
+  // Tapping a situation card starts the conversation straight away.
+  $$('.scenario-card').forEach(card => {
+    card.addEventListener('click', () => {
+      selectScenario(card.dataset.scenario);
+      startConversation();
+    });
+  });
+  $('#replayBtn').addEventListener('click', replayLastReply);
+  $('#quickLevel').addEventListener('change', onQuickSettingChanged);
+  $('#quickTipLanguage').addEventListener('change', onQuickSettingChanged);
+  document.addEventListener('keydown', onKeyDown);
+
+  $$('.provider-card').forEach(card => {
+    card.addEventListener('click', () => {
+      // Keep a key the user typed before switching to another provider.
+      rememberTypedKey(state.settings.provider);
+      state.settings.provider = card.dataset.provider;
+      $('#apiKey').value = getApiKey();
+      updateProviderUI();
+      updateProviderChip();
+    });
+  });
+
+  $('#modelSelect').addEventListener('change', e => {
+    state.settings.model = e.target.value;
+    updateProviderChip();
+  });
+
+  if (typeof speechSynthesis !== 'undefined') {
+    setTimeout(populateVoices, 100);
+    setTimeout(populateVoices, 1000);
+  }
+
+  window.addEventListener('beforeunload', () => {
+    clearInterval(state.elapsedTimer);
+    stopAllSpeech();
+    stopListening();
+    closeMicrophone();
+  });
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

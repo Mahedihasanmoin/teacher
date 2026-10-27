@@ -1,0 +1,17 @@
+# Voxly is one static page. Turn off the redirect and index.php rules
+# that /var/www/html/.htaccess applies to every folder below it.
+RewriteEngine On
+
+# Only answer at http://teacher.localhost/ (www. too, because browsers remember an old redirect).
+# Other addresses, such as http://localhost/teacher/, get "Not Found".
+RewriteCond %{HTTP_HOST} !^(www\.)?teacher\.localhost$ [NC]
+RewriteRule ^ - [R=404,L]
+
+# The page contains an API key, so only this computer may open it.
+# Other devices on the network get "Forbidden".
+Require ip 127.0.0.1 ::1
+
+# Do not let the browser cache the page, so edits show up straight away.
+<IfModule mod_expires.c>
+    ExpiresActive Off
+</IfModule>
